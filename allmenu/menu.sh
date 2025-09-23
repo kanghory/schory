@@ -197,6 +197,7 @@ echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "\E[39;1;92m                     ⇱ MENU BOT dan WEB SERVER ⇲                         \E[0m"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m${NC}"
 echo -e " ${BICyan}[${BIWhite}25${BICyan}]${RED} •${NC} ${YELLOW}SET ${GREEN}BOT TELEGRAM $NC  ${BICyan}[${BIWhite}26${BICyan}]${RED} • ${NC}${YELLOW}WEB SERVER $NC"
+echo -e " ${BICyan}[${BIWhite}27${BICyan}]${RED} •${NC} ${YELLOW}SET DOMAIN WILDCARD $NC"
 echo -e " ${BICyan}[${BIWhite} X ${BICyan}] TYPE X FOR EXIT ${BICyan}${BIYellow}${BICyan}${NC}"  
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m${NC}"
 
@@ -239,6 +240,7 @@ case $opt in
 24) clear ; update-script ;;
 25) clear ; menu_bot_tele ;;
 26) clear ; instal-webserver ;;
+27) clear ; menu-wildcard ;;
 
 0) clear ; menu ;;
 x) exit ;;
