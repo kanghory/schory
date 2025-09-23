@@ -1,21 +1,18 @@
 #!/bin/bash
 
 NC='\033[0m'
-rbg='\033[41;37m'
 r='\033[1;91m'
 g='\033[1;92m'
 y='\033[1;93m'
-u='\033[0;35m'
 c='\033[0;96m'
 w='\033[1;97m'
-q="\e[1;44;41m"
 
 if [[ ! -f '/etc/.data' ]]; then
-    echo -e "${y}File konfigurasi tidak ditemukan. Membuat file baru dengan default credential...${NC}"
+    echo -e "${y}File konfigurasi tidak ditemukan. Membuat file baru...${NC}"
     mkdir -p /etc
     cat <<EOF > /etc/.data
-EMAILCF bukhorimukhammad@gmail.com
-KEY bd06fd9e8a01b73d24db51c4c6584d9133b3e
+EMAILCF example@gmail.com
+KEY your_global_api_key
 EOF
     echo -e "${g}File /etc/.data berhasil dibuat dengan credential default.${NC}"
     sleep 2
@@ -24,287 +21,217 @@ fi
 EMAILCF=$(grep -w 'EMAILCF' '/etc/.data' | awk '{print $2}')
 KEY=$(grep -w 'KEY' '/etc/.data' | awk '{print $2}')
 
-# Contoh format emailcf dan key di dalam file /etc/.data :
-# EMAILCF email_cfnya
-# KEY api_tokennya
-
-
 if [[ -z "$EMAILCF" || -z "$KEY" ]]; then
-  echo -e "${r}Email dan api token tidak di temukan !!${NC}"
+  echo -e "${r}Email/API Key tidak ditemukan !!${NC}"
   exit 1
 fi
 
-lane_atas() {
-echo -e "${c}┌──────────────────────────────────────────┐${NC}"
-}
-lane_bawah() {
-echo -e "${c}└──────────────────────────────────────────┘${NC}"
-}
-add_akun_cf() {
-    clear
-    echo -e "${c}┌────────────────────────────────────┐${NC}"
-    echo -e "${c}│${NC}     ${w}ADD AKUN CLOUDFLARE${NC}           ${c}│${NC}"
-    echo -e "${c}└────────────────────────────────────┘${NC}"
-    read -p "Masukkan Email Cloudflare: " input_email
-    read -p "Masukkan API Token Cloudflare: " input_key
+lane_atas(){ echo -e "${c}┌──────────────────────────────────────────┐${NC}"; }
+lane_bawah(){ echo -e "${c}└──────────────────────────────────────────┘${NC}"; }
 
-    if [[ -z "$input_email" || -z "$input_key" ]]; then
-        echo -e "${r}Email atau API Token tidak boleh kosong!${NC}"
-        sleep 2
-        menu_wc
-    fi
-
-    cat <<EOF > /etc/.data
-EMAILCF $input_email
-KEY $input_key
-EOF
-
-    echo -e "${g}Akun Cloudflare berhasil ditambahkan.${NC}"
-    sleep 2
-    menu_wc
-}
-
-del_akun_cf() {
-    clear
-    echo -e "${c}┌────────────────────────────────────┐${NC}"
-    echo -e "${c}│${NC}   ${r}DELETE AKUN CLOUDFLARE${NC}         ${c}│${NC}"
-    echo -e "${c}└────────────────────────────────────┘${NC}"
-
-    if [[ -f "/etc/.data" ]]; then
-        rm -f /etc/.data
-        echo -e "${g}Akun Cloudflare berhasil dihapus.${NC}"
-    else
-        echo -e "${r}File akun tidak ditemukan.${NC}"
-    fi
-    sleep 2
-    menu_wc
-}
+# ================== API ==================
 get_account_id() {
     response=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts" \
         -H "X-Auth-Email: $EMAILCF" \
         -H "X-Auth-Key: $KEY" \
         -H "Content-Type: application/json")
-
-    if echo "$response" | jq -e '.success' >/dev/null 2>&1; then
-        AKUNID=$(echo "$response" | jq -r '.result[0].id')
-        #echo $AKUNID
-    else
-        echo -e "${r}Gagal mendapatkan Account ID${NC}"
-        echo "$response" | jq
-        exit 1
-    fi
+    AKUNID=$(echo "$response" | jq -r '.result[0].id')
 }
 
 get_zone_id() {
-ZONE=$(curl -sLX GET "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active" \
-     -H "X-Auth-Email: ${EMAILCF}" \
-     -H "X-Auth-Key: ${KEY}" \
-     -H "Content-Type: application/json" | jq -r .result[0].id)
+    ZONE=$(curl -sLX GET "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active" \
+        -H "X-Auth-Email: ${EMAILCF}" \
+        -H "X-Auth-Key: ${KEY}" \
+        -H "Content-Type: application/json" | jq -r .result[0].id)
 }
 
-
-function generate_random() {
-WORKER_NAME="$(</dev/urandom tr -dc a-j0-9 | head -c4)-$(</dev/urandom tr -dc a-z0-9 | head -c8)-$(</dev/urandom tr -dc a-z0-9 | head -c5)"
+# ================== AKUN ==================
+add_akun_cf() {
+    clear
+    echo -e "${c}ADD AKUN CLOUDFLARE${NC}"
+    read -p "Masukkan Email Cloudflare: " input_email
+    read -p "Masukkan API Key Cloudflare: " input_key
+    [[ -z "$input_email" || -z "$input_key" ]] && { echo -e "${r}Tidak boleh kosong!${NC}"; sleep 2; menu_wc; }
+    cat <<EOF > /etc/.data
+EMAILCF $input_email
+KEY $input_key
+EOF
+    echo -e "${g}Akun Cloudflare berhasil ditambahkan.${NC}"
+    sleep 2; menu_wc
 }
+
+del_akun_cf() {
+    clear
+    echo -e "${c}DELETE AKUN CLOUDFLARE${NC}"
+    [[ -f "/etc/.data" ]] && { rm -f /etc/.data; echo -e "${g}Akun berhasil dihapus.${NC}"; } || echo -e "${r}File akun tidak ada.${NC}"
+    sleep 2; menu_wc
+}
+
+# ================== WORKER ==================
+generate_random(){ WORKER_NAME="$(</dev/urandom tr -dc a-j0-9 | head -c4)-$(</dev/urandom tr -dc a-z0-9 | head -c8)"; }
 
 buat_worker() {
-    generate_random
-    get_account_id
-
-    WORKER_SCRIPT="
-    addEventListener('fetch', event => {
-        event.respondWith(handleRequest(event.request))
-    })
-
-    async function handleRequest(request) {
-        return new Response('Hello World!', { status: 200 })
-    }
-    "
-    
+    generate_random; get_account_id
+    WORKER_SCRIPT="addEventListener('fetch', e => { e.respondWith(new Response('Hello',{status:200})) })"
     URL="https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/scripts/$WORKER_NAME"
-    response=$(curl -s -w "%{http_code}" -o response.json -X PUT \
-        -H "X-Auth-Email: $EMAILCF" \
-        -H "X-Auth-Key: $KEY" \
-        -H "Content-Type: application/javascript" \
-        --data "$WORKER_SCRIPT" \
-        "$URL")
-
-    httpCode=$(echo "$response" | tail -n1)
-    body=$(cat response.json)
-
-if [ "$httpCode" -eq 200 ]; then
-echo "Succes. Name : $WORKER_NAME"
-else
-echo -e "${r}Gagal Membuat Worker '$WORKER_NAME':${NC}"
-echo -e "${r}Status Code: $httpCode${NC}"
-echo "$body"
-fi
-
-rm -f response.json
+    response=$(curl -s -w "%{http_code}" -o /tmp/resp.json -X PUT \
+        -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY" -H "Content-Type: application/javascript" \
+        --data "$WORKER_SCRIPT" "$URL")
+    [[ "$response" -eq 200 ]] && echo "Succes. Name : $WORKER_NAME" || { echo -e "${r}Gagal membuat worker${NC}"; cat /tmp/resp.json; }
+    rm -f /tmp/resp.json
 }
 
-hapus_worker() {
-    WORKER_NAME="${1}"
-    get_account_id
-    
-    URL="https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/scripts/$WORKER_NAME"
-    response=$(curl -s -w "%{http_code}" -o response.json -X DELETE -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY" "$URL")
+add_domain_worker() {
+    get_account_id; WORKER_NAME="${1}"; CUSTOM_DOMAIN="${2}"
+    DATA="{\"hostname\":\"$CUSTOM_DOMAIN\",\"service\":\"$WORKER_NAME\",\"environment\":\"production\"}"
+    curl -s -X PUT "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/domains/records" \
+        -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY" -H "Content-Type: application/json" -d "$DATA" >/dev/null
+    echo -e "${g}Domain $CUSTOM_DOMAIN ditambahkan${NC}"
+}
 
-    httpCode=$(echo "$response" | tail -n1)
-    body=$(echo "$response" | sed '$d')
+# ================== WILDCARD ==================
+add_wc() {
+    echo -e "${c}Masukkan domain yg akan di pointing wildcard${NC}"
+    read -p " Domain: " domain
+    [[ "$domain" = "x" ]] && { echo "Batal"; exit 0; }
+    workername=$(buat_worker | awk '{print $4}')
+    [[ ! -f /etc/.wc/bug.txt ]] && { echo -e "${r}File bug.txt kosong!${NC}"; sleep 2; menu_wc; }
+    data=($(cat /etc/.wc/bug.txt))
+    for bug in "${data[@]}"; do add_domain_worker $workername ${bug}.${domain}; done
+    echo -e "${g}Wildcard $domain selesai${NC}"
+    read -p "Enter untuk kembali..."; menu_wc
+}
 
-    if [ "$httpCode" -eq 200 ]; then
-        echo -ne
-    else
-        echo -e "${r}Gagal menghapus Worker '$WORKER_NAME':${NC}"
-        echo -e "${r}Status Code: $httpCode${NC}"
-        echo "$body"
-        exit 1
+del_wc() {
+    echo -e "${c}Hapus Wildcard${NC}"
+    echo -e "1) Pilih dari list aktif (hapus 1 wildcard)"
+    echo -e "2) Input manual (hapus 1 wildcard)"
+    echo -e "3) Hapus semua wildcard dari bug.txt"
+    read -p "Pilih opsi: " pil
+    if [[ "$pil" == "1" ]]; then
+        list_wc "delete"
+    elif [[ "$pil" == "2" ]]; then
+        read -p "Masukkan domain: " domain
+        hapus_wc_domain "$domain"
+    elif [[ "$pil" == "3" ]]; then
+        hapus_semua_wc
     fi
 }
 
-function pointing_cname() {
-domain_sub="${1}"
-
-DOMAIN=$(echo "$domain_sub" | cut -d "." -f2-)
-SUB=$(echo "$domain_sub" | cut -d "." -f1)
-
-SUB_DOMAIN="*.${SUB}.${DOMAIN}"
-
-get_zone_id
-
-RECORD_INFO=$(curl -sLX GET "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records?name=${SUB_DOMAIN}" \
-     -H "X-Auth-Email: ${EMAILCF}" \
-     -H "X-Auth-Key: ${KEY}" \
-     -H "Content-Type: application/json")
-
-RECORD=$(echo $RECORD_INFO | jq -r .result[0].id)
-OLD_IP=$(echo $RECORD_INFO | jq -r .result[0].content)
-
-if [[ "${#RECORD}" -le 10 ]]; then
-     RECORD=$(curl -sLX POST "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records" \
-     -H "X-Auth-Email: ${EMAILCF}" \
-     -H "X-Auth-Key: ${KEY}" \
-     -H "Content-Type: application/json" \
-     --data '{"type":"CNAME","name":"'${SUB_DOMAIN}'","content":"'${domain_sub}'","ttl":120,"proxied":false}' | jq -r .result.id)
-else
-     RESULT=$(curl -sLX PUT "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records/${RECORD}" \
-     -H "X-Auth-Email: ${EMAILCF}" \
-     -H "X-Auth-Key: ${KEY}" \
-     -H "Content-Type: application/json" \
-     --data '{"type":"CNAME","name":"'${SUB_DOMAIN}'","content":"'${domain_sub}'","ttl":120,"proxied":false}')
-fi
-}
-
-function add_domain_worker() {
+hapus_wc_domain() {
+    domain="$1"
+    DOMAIN=$(echo "$domain" | cut -d "." -f2-)
+    get_zone_id
     get_account_id
-    WORKER_NAME="${1}"
-    CUSTOM_DOMAIN="${2}"
 
-    DATA=$(cat <<EOF
-{
-    "hostname": "$CUSTOM_DOMAIN",
-    "service": "$WORKER_NAME",
-    "environment": "production"
-}
-EOF
-    )
+    echo -e "${y}Menghapus wildcard untuk $domain${NC}"
 
-    RESPONSE=$(curl -s -w "%{http_code}" -o response.json \
-        -X PUT "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/domains/records" \
-        -H "X-Auth-Email: $EMAILCF" \
-        -H "X-Auth-Key: $KEY" \
-        -H "Content-Type: application/json" \
-        -d "$DATA")
-
-    HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-
-    if [ "$HTTP_CODE" -eq 200 ]; then
-        echo -e "${c}Berhasil menambahkan domain $CUSTOM_DOMAIN ${NC}"
-    else
-        echo -e "${r}Gagal menambahkan domain. Kode error: $HTTP_CODE ${NC}"
-        [ -f response.json ] && cat response.json
+    # Hapus bug subdomain
+    if [[ -f /etc/.wc/bug.txt ]]; then
+        data=($(cat /etc/.wc/bug.txt))
+        for bug in "${data[@]}"; do
+            target="${bug}.${domain}"
+            RECORDS=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records?name=${target}" \
+                -H "X-Auth-Email: ${EMAILCF}" \
+                -H "X-Auth-Key: ${KEY}" \
+                -H "Content-Type: application/json" | jq -r '.result[].id')
+            for rec in $RECORDS; do
+                curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records/$rec" \
+                    -H "X-Auth-Email: ${EMAILCF}" \
+                    -H "X-Auth-Key: ${KEY}" \
+                    -H "Content-Type: application/json" >/dev/null
+                echo -e "${g}Record ${target} dihapus${NC}"
+            done
+        done
     fi
 
-    [ -f response.json ] && rm -f response.json
+    # Hapus mapping worker yang cocok
+    MAPS=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/domains" \
+        -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY" -H "Content-Type: application/json")
+    MAP_IDs=$(echo "$MAPS" | jq -r --arg dom ".$domain" '.result[] | select(.hostname | endswith($dom)) | .id')
+
+    for mid in $MAP_IDs; do
+        curl -s -X DELETE "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/domains/$mid" \
+            -H "X-Auth-Email: $EMAILCF" \
+            -H "X-Auth-Key: $KEY" \
+            -H "Content-Type: application/json" >/dev/null
+        echo -e "${g}Mapping worker $mid dihapus${NC}"
+    done
 }
 
+hapus_semua_wc() {
+    [[ ! -f /etc/.wc/bug.txt ]] && { echo -e "${r}File bug.txt kosong!${NC}"; sleep 2; menu_wc; }
+    bugs=($(cat /etc/.wc/bug.txt))
+    get_account_id
+    RESP=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/domains" \
+        -H "X-Auth-Email: $EMAILCF" \
+        -H "X-Auth-Key: $KEY" \
+        -H "Content-Type: application/json")
+    arr=($(echo "$RESP" | jq -r '.result[].hostname'))
 
-function add_wc() {
-echo -e "  ${c} Masukkan domain yg akan di pointing wildcard ( x untuk batal )${NC}"
-input_domain() {
- read -p " Domain: " domain
- if [[ "${domain}" == "x" ]]; then
- echo -e "Proses di batalkan"
- exit 0
- elif [[ -z $domain ]]; then
-  input_domain
- fi
-}
-input_domain
-workername=$(buat_worker | grep -E "Succes" | awk '{print $4}')
-pointing_cname ${domain}
-data=($(cat /etc/.wc/bug.txt))
-for bug in "${data[@]}"
-do
-add_domain_worker $workername ${bug}.${domain}
-done
-hapus_worker $workername
-echo -e "${u} Enter Back To menu${NC}"
-read
-menu_wc
+    echo -e "${y}Menghapus semua wildcard yang ada di bug.txt...${NC}"
+    for d in "${arr[@]}"; do
+        for bug in "${bugs[@]}"; do
+            if [[ "$d" == $bug.* ]]; then
+                hapus_wc_domain "$d"
+            fi
+        done
+    done
+    echo -e "${g}Semua wildcard dari bug.txt berhasil dihapus${NC}"
+    read -p "Enter untuk kembali..."; menu_wc
 }
 
-function menu_wc() {
+list_wc() {
+    get_account_id
+    RESP=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/domains" \
+        -H "X-Auth-Email: $EMAILCF" \
+        -H "X-Auth-Key: $KEY" \
+        -H "Content-Type: application/json")
+    arr=($(echo "$RESP" | jq -r '.result[].hostname'))
+    [[ ${#arr[@]} -eq 0 ]] && { echo -e "${r}Tidak ada wildcard aktif${NC}"; sleep 2; menu_wc; }
+    [[ -f /etc/.wc/bug.txt ]] && bugs=($(cat /etc/.wc/bug.txt)) || bugs=()
+    echo -e "${c}Daftar Wildcard Aktif:${NC}"
+    i=1
+    for d in "${arr[@]}"; do
+        label=""
+        for bug in "${bugs[@]}"; do
+            [[ "$d" == $bug.* ]] && label="[BUG]"
+        done
+        echo "$i) $d $label"
+        ((i++))
+    done
+    [[ "$1" == "delete" ]] && {
+        read -p "Pilih nomor yang mau dihapus: " no
+        hapus_wc_domain "${arr[$((no-1))]}"
+        read -p "Enter untuk kembali..."; menu_wc
+    } || { read -p "Enter untuk kembali..."; menu_wc; }
+}
+
+# ================== MENU ==================
+menu_wc() {
 clear
 lane_atas
-echo -e "${c}│$NC        ${u}.::.${NC} ${w}MENU POINTING WC${NC} ${u}.::.${NC}        ${c}│${NC}"
+echo -e "${c}│${NC}     ${w}MENU POINTING WC${NC}     ${c}│${NC}"
 lane_bawah
-echo -e "${c}│$NC 1.)${y}☞ ${w} Add Akun Cloudflare${NC}"
-echo -e "${c}│$NC 2.)${y}☞ ${w} Delete Akun Cloudflare${NC}"
-echo -e "${c}│$NC 3.)${y}☞ ${w} Add Wildcard${NC}"
-echo -e "${c}│$NC 4.)${y}☞ ${w} Delete Wildcard${NC}"
-echo -e "${c}│$NC 5.)${y}☞ ${w} Add or edit bug Wildcard${NC}"
-echo -e "${c}│$NC x.)${y}☞ ${r} Exit${NC}"
+echo -e "${c}│${NC} 1) Add Akun Cloudflare"
+echo -e "${c}│${NC} 2) Delete Akun Cloudflare"
+echo -e "${c}│${NC} 3) Add Wildcard"
+echo -e "${c}│${NC} 4) Delete Wildcard"
+echo -e "${c}│${NC} 5) Add/Edit bug Wildcard"
+echo -e "${c}│${NC} 6) List Wildcard Aktif"
+echo -e "${c}│${NC} x) Exit"
 lane_bawah
-echo
-read -p " Select Options [ 1 - 5 or x ] " opt
+read -p "Select: " opt
 case $opt in
-01 | 1) clear ; add_akun_cf ;;
-02 | 2) clear ; del_akun_cf ;;
-03 | 3) clear ; add_wc ;;
-04 | 4) clear ; echo -e "${r} Cooming soon${NC}" ; sleep 2 ; menu_wc ;;
-05 | 5) clear
-mkdir -p /etc/.wc
-echo
-echo -e " ${c} Silahkan masukkan bug ke dalam file${NC}"
-echo -e " ${r} Jika selesai memasukkan bug. silahkan klik tombol ctrl trus klik di keyboard x dan lanjutkan dengan y lalu enter${NC}"
-echo
-read -p " Silahkan enter untuk memasukkan bug" stepsister
-nano /etc/.wc/bug.txt
-echo -e " Success"
-sleep 2
-menu_wc
-;;
-x | X) exit 0 ;;
-*) clear ; $0 ;;
+1) add_akun_cf ;;
+2) del_akun_cf ;;
+3) add_wc ;;
+4) del_wc ;;
+5) mkdir -p /etc/.wc; nano /etc/.wc/bug.txt; menu_wc ;;
+6) list_wc ;;
+x|X) exit 0 ;;
+*) menu_wc ;;
 esac
 }
 
-if [[ "${1}" == "buat_worker" ]]; then
-buat_worker
-elif [[ "${1}" == "hapus_worker" ]]; then
-hapus_worker "${2}"
-elif [[ "${1}" == "add_domain_worker" ]]; then
-  if [[ -z "${2}" || -z "${3}" ]]; then
-  echo "Usage:
-  $0 $1 worker_name custom_domain"
-  exit 1
-  else
-  add_domain_worker "${2}" "${3}"
-  fi
-elif [[ "${1}" == "pointing_cname" ]]; then
-pointing_cname "${2}"
-else
 menu_wc
-fi
