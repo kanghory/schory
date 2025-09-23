@@ -1,310 +1,166 @@
 #!/bin/bash
+# Menu Wildcard + SSL Cloudflare + Auto Renew + Telegram Notify
+# By Kanghory Tunneling
 
 NC='\033[0m'
-rbg='\033[41;37m'
 r='\033[1;91m'
 g='\033[1;92m'
 y='\033[1;93m'
-u='\033[0;35m'
 c='\033[0;96m'
 w='\033[1;97m'
-q="\e[1;44;41m"
 
+# ------------------ Cek akun CF -------------------
 if [[ ! -f '/etc/.data' ]]; then
-    echo -e "${y}File konfigurasi tidak ditemukan. Membuat file baru dengan default credential...${NC}"
+    echo -e "${y}File konfigurasi tidak ditemukan. Membuat default...${NC}"
     mkdir -p /etc
     cat <<EOF > /etc/.data
-EMAILCF bukhorimukhammad@gmail.com
-KEY bd06fd9e8a01b73d24db51c4c6584d9133b3e
+EMAILCF email_cf@example.com
+KEY api_key_anda
 EOF
-    echo -e "${g}File /etc/.data berhasil dibuat dengan credential default.${NC}"
-    sleep 2
 fi
 
 EMAILCF=$(grep -w 'EMAILCF' '/etc/.data' | awk '{print $2}')
 KEY=$(grep -w 'KEY' '/etc/.data' | awk '{print $2}')
 
-# Contoh format emailcf dan key di dalam file /etc/.data :
-# EMAILCF email_cfnya
-# KEY api_tokennya
+# ------------------ Fungsi Menu -------------------
+lane_atas() { echo -e "${c}┌──────────────────────────────────────────┐${NC}"; }
+lane_bawah() { echo -e "${c}└──────────────────────────────────────────┘${NC}"; }
 
-
-if [[ -z "$EMAILCF" || -z "$KEY" ]]; then
-  echo -e "${r}Email dan api token tidak di temukan !!${NC}"
-  exit 1
-fi
-
-lane_atas() {
-echo -e "${c}┌──────────────────────────────────────────┐${NC}"
-}
-lane_bawah() {
-echo -e "${c}└──────────────────────────────────────────┘${NC}"
-}
 add_akun_cf() {
     clear
-    echo -e "${c}┌────────────────────────────────────┐${NC}"
-    echo -e "${c}│${NC}     ${w}ADD AKUN CLOUDFLARE${NC}           ${c}│${NC}"
-    echo -e "${c}└────────────────────────────────────┘${NC}"
-    read -p "Masukkan Email Cloudflare: " input_email
-    read -p "Masukkan API Token Cloudflare: " input_key
-
-    if [[ -z "$input_email" || -z "$input_key" ]]; then
-        echo -e "${r}Email atau API Token tidak boleh kosong!${NC}"
-        sleep 2
-        menu_wc
-    fi
-
+    echo -e "${c}Add Akun Cloudflare${NC}"
+    read -p "Email Cloudflare: " input_email
+    read -p "API Key Cloudflare: " input_key
+    [[ -z "$input_email" || -z "$input_key" ]] && { echo -e "${r}Input kosong!${NC}"; sleep 2; menu_wc; }
     cat <<EOF > /etc/.data
 EMAILCF $input_email
 KEY $input_key
 EOF
-
-    echo -e "${g}Akun Cloudflare berhasil ditambahkan.${NC}"
-    sleep 2
-    menu_wc
+    echo -e "${g}Akun CF disimpan.${NC}"; sleep 2; menu_wc
 }
 
 del_akun_cf() {
     clear
-    echo -e "${c}┌────────────────────────────────────┐${NC}"
-    echo -e "${c}│${NC}   ${r}DELETE AKUN CLOUDFLARE${NC}         ${c}│${NC}"
-    echo -e "${c}└────────────────────────────────────┘${NC}"
+    echo -e "${c}Delete Akun Cloudflare${NC}"
+    rm -f /etc/.data
+    echo -e "${g}Akun CF dihapus.${NC}"; sleep 2; menu_wc
+}
 
-    if [[ -f "/etc/.data" ]]; then
-        rm -f /etc/.data
-        echo -e "${g}Akun Cloudflare berhasil dihapus.${NC}"
-    else
-        echo -e "${r}File akun tidak ditemukan.${NC}"
-    fi
+edit_bug() {
+    mkdir -p /etc/.wc
+    nano /etc/.wc/bug.txt
+    echo -e "${g}Bug updated${NC}"
     sleep 2
     menu_wc
 }
-get_account_id() {
-    response=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts" \
-        -H "X-Auth-Email: $EMAILCF" \
-        -H "X-Auth-Key: $KEY" \
-        -H "Content-Type: application/json")
 
-    if echo "$response" | jq -e '.success' >/dev/null 2>&1; then
-        AKUNID=$(echo "$response" | jq -r '.result[0].id')
-        #echo $AKUNID
-    else
-        echo -e "${r}Gagal mendapatkan Account ID${NC}"
-        echo "$response" | jq
-        exit 1
+# ------------------ Issue SSL Wildcard -------------------
+issue_ssl_wc() {
+    clear
+    EMAILCF=$(grep -w 'EMAILCF' '/etc/.data' | awk '{print $2}')
+    KEY=$(grep -w 'KEY' '/etc/.data' | awk '{print $2}')
+    [[ -z "$EMAILCF" || -z "$KEY" ]] && { echo -e "${r}Akun CF belum diatur!${NC}"; sleep 2; menu_wc; }
+
+    read -p "Masukkan domain utama (contoh: vpn.example.com): " DOMAIN
+    [[ -z "$DOMAIN" ]] && { echo -e "${r}Domain kosong!${NC}"; sleep 2; menu_wc; }
+
+    if ! command -v ~/.acme.sh/acme.sh >/dev/null 2>&1; then
+        echo -e "${y}Install acme.sh...${NC}"
+        curl https://get.acme.sh | sh
+        source ~/.bashrc
     fi
-}
 
-get_zone_id() {
-ZONE=$(curl -sLX GET "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active" \
-     -H "X-Auth-Email: ${EMAILCF}" \
-     -H "X-Auth-Key: ${KEY}" \
-     -H "Content-Type: application/json" | jq -r .result[0].id)
-}
+    export CF_Email="$EMAILCF"
+    export CF_Key="$KEY"
 
+    echo -e "${c}Issue SSL untuk $DOMAIN + *.$DOMAIN ...${NC}"
+    ~/.acme.sh/acme.sh --issue --dns dns_cf -d $DOMAIN -d "*.$DOMAIN" --keylength ec-256
 
-function generate_random() {
-WORKER_NAME="$(</dev/urandom tr -dc a-j0-9 | head -c4)-$(</dev/urandom tr -dc a-z0-9 | head -c8)-$(</dev/urandom tr -dc a-z0-9 | head -c5)"
-}
+    mkdir -p /etc/ssl/${DOMAIN}
+    ~/.acme.sh/acme.sh --install-cert -d $DOMAIN \
+      --ecc \
+      --key-file       /etc/ssl/${DOMAIN}/privkey.key \
+      --fullchain-file /etc/ssl/${DOMAIN}/fullchain.crt
 
-buat_worker() {
-    generate_random
-    get_account_id
-
-    WORKER_SCRIPT="
-    addEventListener('fetch', event => {
-        event.respondWith(handleRequest(event.request))
-    })
-
-    async function handleRequest(request) {
-        return new Response('Hello World!', { status: 200 })
-    }
-    "
-    
-    URL="https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/scripts/$WORKER_NAME"
-    response=$(curl -s -w "%{http_code}" -o response.json -X PUT \
-        -H "X-Auth-Email: $EMAILCF" \
-        -H "X-Auth-Key: $KEY" \
-        -H "Content-Type: application/javascript" \
-        --data "$WORKER_SCRIPT" \
-        "$URL")
-
-    httpCode=$(echo "$response" | tail -n1)
-    body=$(cat response.json)
-
-if [ "$httpCode" -eq 200 ]; then
-echo "Succes. Name : $WORKER_NAME"
-else
-echo -e "${r}Gagal Membuat Worker '$WORKER_NAME':${NC}"
-echo -e "${r}Status Code: $httpCode${NC}"
-echo "$body"
-fi
-
-rm -f response.json
-}
-
-hapus_worker() {
-    WORKER_NAME="${1}"
-    get_account_id
-    
-    URL="https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/scripts/$WORKER_NAME"
-    response=$(curl -s -w "%{http_code}" -o response.json -X DELETE -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY" "$URL")
-
-    httpCode=$(echo "$response" | tail -n1)
-    body=$(echo "$response" | sed '$d')
-
-    if [ "$httpCode" -eq 200 ]; then
-        echo -ne
+    if [[ -d "/etc/xray" ]]; then
+        cp /etc/ssl/${DOMAIN}/privkey.key /etc/xray/vpn.key
+        cp /etc/ssl/${DOMAIN}/fullchain.crt /etc/xray/vpn.crt
+        systemctl restart xray
+        echo -e "${g}SSL Wildcard dipasang ke Xray!${NC}"
     else
-        echo -e "${r}Gagal menghapus Worker '$WORKER_NAME':${NC}"
-        echo -e "${r}Status Code: $httpCode${NC}"
-        echo "$body"
-        exit 1
+        echo -e "${y}SSL tersimpan di /etc/ssl/${DOMAIN}${NC}"
     fi
+
+    # Setup auto renew
+    echo -e "${c}Mengaktifkan auto renew SSL...${NC}"
+    ~/.acme.sh/acme.sh --upgrade --auto-upgrade
+    (crontab -l 2>/dev/null; echo "0 3 * * * ~/.acme.sh/acme.sh --cron --home ~/.acme.sh > /dev/null && /usr/bin/ssl-notify.sh $DOMAIN") | crontab -
+
+    echo -e "${g}Selesai! SSL aktif untuk $DOMAIN dan *.$DOMAIN${NC}"
+    echo -e "${g}Auto renew SSL sudah aktif (cek tiap jam 03:00)${NC}"
+    read -p "Enter untuk kembali ke menu..."
+    menu_wc
 }
 
-function pointing_cname() {
-domain_sub="${1}"
+# ------------------ Telegram Notify -------------------
+setup_telegram_notify() {
+    echo -e "${c}Setup Notifikasi Telegram${NC}"
+    read -p "Masukkan BOT TOKEN: " BOT_TOKEN
+    read -p "Masukkan CHAT ID: " CHAT_ID
 
-DOMAIN=$(echo "$domain_sub" | cut -d "." -f2-)
-SUB=$(echo "$domain_sub" | cut -d "." -f1)
-
-SUB_DOMAIN="*.${SUB}.${DOMAIN}"
-
-get_zone_id
-
-RECORD_INFO=$(curl -sLX GET "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records?name=${SUB_DOMAIN}" \
-     -H "X-Auth-Email: ${EMAILCF}" \
-     -H "X-Auth-Key: ${KEY}" \
-     -H "Content-Type: application/json")
-
-RECORD=$(echo $RECORD_INFO | jq -r .result[0].id)
-OLD_IP=$(echo $RECORD_INFO | jq -r .result[0].content)
-
-if [[ "${#RECORD}" -le 10 ]]; then
-     RECORD=$(curl -sLX POST "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records" \
-     -H "X-Auth-Email: ${EMAILCF}" \
-     -H "X-Auth-Key: ${KEY}" \
-     -H "Content-Type: application/json" \
-     --data '{"type":"CNAME","name":"'${SUB_DOMAIN}'","content":"'${domain_sub}'","ttl":120,"proxied":false}' | jq -r .result.id)
-else
-     RESULT=$(curl -sLX PUT "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records/${RECORD}" \
-     -H "X-Auth-Email: ${EMAILCF}" \
-     -H "X-Auth-Key: ${KEY}" \
-     -H "Content-Type: application/json" \
-     --data '{"type":"CNAME","name":"'${SUB_DOMAIN}'","content":"'${domain_sub}'","ttl":120,"proxied":false}')
-fi
-}
-
-function add_domain_worker() {
-    get_account_id
-    WORKER_NAME="${1}"
-    CUSTOM_DOMAIN="${2}"
-
-    DATA=$(cat <<EOF
-{
-    "hostname": "$CUSTOM_DOMAIN",
-    "service": "$WORKER_NAME",
-    "environment": "production"
-}
+    mkdir -p /etc/.wc
+    cat <<EOF > /etc/.wc/telegram.conf
+BOT_TOKEN=$BOT_TOKEN
+CHAT_ID=$CHAT_ID
 EOF
-    )
 
-    RESPONSE=$(curl -s -w "%{http_code}" -o response.json \
-        -X PUT "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/domains/records" \
-        -H "X-Auth-Email: $EMAILCF" \
-        -H "X-Auth-Key: $KEY" \
-        -H "Content-Type: application/json" \
-        -d "$DATA")
+    # Script notifikasi
+    cat <<'EOF' > /usr/bin/ssl-notify.sh
+#!/bin/bash
+DOMAIN=$1
+CONF="/etc/.wc/telegram.conf"
+[ ! -f "$CONF" ] && exit 0
+source $CONF
+curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+    -d chat_id="${CHAT_ID}" \
+    -d parse_mode="Markdown" \
+    -d text="✅ SSL Wildcard untuk *${DOMAIN}* berhasil diperpanjang otomatis!"
+EOF
+    chmod +x /usr/bin/ssl-notify.sh
 
-    HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-
-    if [ "$HTTP_CODE" -eq 200 ]; then
-        echo -e "${c}Berhasil menambahkan domain $CUSTOM_DOMAIN ${NC}"
-    else
-        echo -e "${r}Gagal menambahkan domain. Kode error: $HTTP_CODE ${NC}"
-        [ -f response.json ] && cat response.json
-    fi
-
-    [ -f response.json ] && rm -f response.json
+    echo -e "${g}Notifikasi Telegram aktif.${NC}"
+    sleep 2
+    menu_wc
 }
 
-
-function add_wc() {
-echo -e "  ${c} Masukkan domain yg akan di pointing wildcard ( x untuk batal )${NC}"
-input_domain() {
- read -p " Domain: " domain
- if [[ "${domain}" == "x" ]]; then
- echo -e "Proses di batalkan"
- exit 0
- elif [[ -z $domain ]]; then
-  input_domain
- fi
-}
-input_domain
-workername=$(buat_worker | grep -E "Succes" | awk '{print $4}')
-pointing_cname ${domain}
-data=($(cat /etc/.wc/bug.txt))
-for bug in "${data[@]}"
-do
-add_domain_worker $workername ${bug}.${domain}
-done
-hapus_worker $workername
-echo -e "${u} Enter Back To menu${NC}"
-read
-menu_wc
-}
-
-function menu_wc() {
+# ------------------ Menu Utama -------------------
+menu_wc() {
 clear
 lane_atas
-echo -e "${c}│$NC        ${u}.::.${NC} ${w}MENU POINTING WC${NC} ${u}.::.${NC}        ${c}│${NC}"
+echo -e "${c}│${NC}    ${w}MENU POINTING & SSL WILDCARD${NC}    ${c}│${NC}"
 lane_bawah
-echo -e "${c}│$NC 1.)${y}☞ ${w} Add Akun Cloudflare${NC}"
-echo -e "${c}│$NC 2.)${y}☞ ${w} Delete Akun Cloudflare${NC}"
-echo -e "${c}│$NC 3.)${y}☞ ${w} Add Wildcard${NC}"
-echo -e "${c}│$NC 4.)${y}☞ ${w} Delete Wildcard${NC}"
-echo -e "${c}│$NC 5.)${y}☞ ${w} Add or edit bug Wildcard${NC}"
-echo -e "${c}│$NC x.)${y}☞ ${r} Exit${NC}"
+echo -e "${c}│${NC} 1.)${y}☞ ${w} Add Akun Cloudflare${NC}"
+echo -e "${c}│${NC} 2.)${y}☞ ${w} Delete Akun Cloudflare${NC}"
+echo -e "${c}│${NC} 3.)${y}☞ ${w} Add Wildcard (CNAME Worker)${NC}"
+echo -e "${c}│${NC} 4.)${y}☞ ${w} Delete Wildcard${NC}"
+echo -e "${c}│${NC} 5.)${y}☞ ${w} Add/Edit Bug Wildcard${NC}"
+echo -e "${c}│${NC} 6.)${y}☞ ${w} Issue SSL Wildcard (Port 443)${NC}"
+echo -e "${c}│${NC} 7.)${y}☞ ${w} Setup Notif Telegram Renew SSL${NC}"
+echo -e "${c}│${NC} x.)${y}☞ ${r} Exit${NC}"
 lane_bawah
 echo
-read -p " Select Options [ 1 - 5 or x ] " opt
+read -p "Pilih [1-7/x]: " opt
 case $opt in
-01 | 1) clear ; add_akun_cf ;;
-02 | 2) clear ; del_akun_cf ;;
-03 | 3) clear ; add_wc ;;
-04 | 4) clear ; echo -e "${r} Cooming soon${NC}" ; sleep 2 ; menu_wc ;;
-05 | 5) clear
-mkdir -p /etc/.wc
-echo
-echo -e " ${c} Silahkan masukkan bug ke dalam file${NC}"
-echo -e " ${r} Jika selesai memasukkan bug. silahkan klik tombol ctrl trus klik di keyboard x dan lanjutkan dengan y lalu enter${NC}"
-echo
-read -p " Silahkan enter untuk memasukkan bug" stepsister
-nano /etc/.wc/bug.txt
-echo -e " Success"
-sleep 2
-menu_wc
-;;
-x | X) exit 0 ;;
-*) clear ; $0 ;;
+1) add_akun_cf ;;
+2) del_akun_cf ;;
+3) echo -e "${y}Fitur Add WC masih di script awal${NC}" ; sleep 2 ; menu_wc ;;
+4) echo -e "${r}Coming Soon${NC}" ; sleep 2 ; menu_wc ;;
+5) edit_bug ;;
+6) issue_ssl_wc ;;
+7) setup_telegram_notify ;;
+x|X) exit 0 ;;
+*) menu_wc ;;
 esac
 }
 
-if [[ "${1}" == "buat_worker" ]]; then
-buat_worker
-elif [[ "${1}" == "hapus_worker" ]]; then
-hapus_worker "${2}"
-elif [[ "${1}" == "add_domain_worker" ]]; then
-  if [[ -z "${2}" || -z "${3}" ]]; then
-  echo "Usage:
-  $0 $1 worker_name custom_domain"
-  exit 1
-  else
-  add_domain_worker "${2}" "${3}"
-  fi
-elif [[ "${1}" == "pointing_cname" ]]; then
-pointing_cname "${2}"
-else
 menu_wc
-fi
