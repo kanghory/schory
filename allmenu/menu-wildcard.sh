@@ -305,9 +305,17 @@ function del_wc() {
 function menu_wc() {
     clear
     lane_atas
-    echo -e "${c}│$NC        ${u}.::.${NC} ${w}MENU POINTING WC${NC} ${u}.::.${NC}        ${c}│${NC}"
-    echo -e "${c}│$NC        ${u}.::.${NC} ${w}kalo gx konek cek bagian mapping workernya di cf DNS pastikan terhapus${NC} ${u}.::.${NC}        ${c}│${NC}"
+    echo -e "${c}│${NC}        ${u}.::.${NC} ${w} MENU POINTING WILDCARD ${NC} ${u}.::.${NC}       ${c}│${NC}"
+    echo -e "${c}│${NC} 🔑 ${w}Delete akun Cloudflare biar bersih${NC}               ${c}│${NC}"
+    echo -e "${c}│${NC}    ${w}Baru login ulang akun Cloudflare pribadi${NC}         ${c}│${NC}"
+    echo -e "${c}│${NC} 🐞 ${w}Add bug/domain yang akan di-wildcardkan${NC}          ${c}│${NC}"
+    echo -e "${c}│${NC} ✨ ${w}Add wildcard otomatis lewat script${NC}               ${c}│${NC}"
+    echo -e "${c}│${NC} ⚙️  ${w}Script akan membuat DNS + Worker otomatis${NC}        ${c}│${NC}"
+    echo -e "${c}├──────────────────────────────────────────┤${NC}"
+    echo -e "${c}│${NC} ⚠️  ${r}Warning: jika gagal konek${NC}                         ${c}│${NC}"
+    echo -e "${c}│${NC}     ${r}hapus mapping worker di DNS Cloudflare${NC}          ${c}│${NC}"
     lane_bawah
+
     echo -e "${c}│$NC 1.)${y}☞ ${w} Add Akun Cloudflare${NC}"
     echo -e "${c}│$NC 2.)${y}☞ ${w} Delete Akun Cloudflare${NC}"
     echo -e "${c}│$NC 3.)${y}☞ ${w} Add Wildcard${NC}"
