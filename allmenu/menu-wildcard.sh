@@ -14,8 +14,8 @@ if [[ ! -f '/etc/.data' ]]; then
     echo -e "${y}File konfigurasi tidak ditemukan. Membuat file baru dengan default credential...${NC}"
     mkdir -p /etc
     cat <<EOF > /etc/.data
-EMAILCF trenadm.vpn@gmail.com
-KEY 1b34d0f4661324dc63aa1c37e12ab8f765a2a
+EMAILCF bukhorimukhammad@gmail.com
+KEY bd06fd9e8a01b73d24db51c4c6584d9133b3e
 EOF
     echo -e "${g}File /etc/.data berhasil dibuat dengan credential default.${NC}"
     sleep 2
