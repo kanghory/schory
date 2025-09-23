@@ -306,6 +306,7 @@ function menu_wc() {
     clear
     lane_atas
     echo -e "${c}│$NC        ${u}.::.${NC} ${w}MENU POINTING WC${NC} ${u}.::.${NC}        ${c}│${NC}"
+    echo -e "${c}│$NC        ${u}.::.${NC} ${w}kalo gx konek cek bagian mapping workernya di cf DNS pastikan terhapus${NC} ${u}.::.${NC}        ${c}│${NC}"
     lane_bawah
     echo -e "${c}│$NC 1.)${y}☞ ${w} Add Akun Cloudflare${NC}"
     echo -e "${c}│$NC 2.)${y}☞ ${w} Delete Akun Cloudflare${NC}"
