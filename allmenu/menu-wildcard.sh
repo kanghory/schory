@@ -133,10 +133,25 @@ generate_random() {
 # =============================================
 # Buat Worker JS
 # =============================================
+# =============================================
+# Buat Worker JS (Manual Input Name)
+# =============================================
 buat_worker() {
     clear
     get_account_id
-    generate_random
+
+    echo -e "${c}┌──────────────────────────────────────┐${NC}"
+    echo -e "${c}│${NC}     ${w}ADD WORKER JAVASCRIPT${NC}         ${c}│${NC}"
+    echo -e "${c}└──────────────────────────────────────┘${NC}"
+    echo ""
+    read -p "Masukkan nama Worker (huruf kecil & angka, tanpa spasi): " WORKER_NAME
+
+    # Validasi nama
+    if [[ ! "$WORKER_NAME" =~ ^[a-z0-9-]+$ ]]; then
+        echo -e "${r}Nama worker hanya boleh huruf kecil, angka, dan tanda '-'${NC}"
+        sleep 1
+        return
+    fi
 
     WORKER_SCRIPT="
 addEventListener('fetch', event => {
@@ -145,6 +160,7 @@ addEventListener('fetch', event => {
 "
     URL="https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/scripts/$WORKER_NAME"
 
+    echo -e "${c}Mengupload Worker JS...${NC}"
     RESPONSE=$(curl -s -w "%{http_code}" -o response.json -X PUT \
         -H "X-Auth-Email: $EMAILCF" \
         -H "X-Auth-Key: $KEY" \
@@ -154,7 +170,7 @@ addEventListener('fetch', event => {
 
     CODE=$(echo "$RESPONSE" | tail -n1)
     if [[ "$CODE" == "200" ]]; then
-        echo -e "${g}Worker berhasil dibuat: $WORKER_NAME${NC}"
+        echo -e "${g}Worker '$WORKER_NAME' berhasil dibuat.${NC}"
     else
         echo -e "${r}Gagal membuat worker (${CODE})${NC}"
         cat response.json
