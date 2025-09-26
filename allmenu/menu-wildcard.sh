@@ -296,10 +296,23 @@ hapus_worker_js() {
 }
 
 # =============================================
-# Function Pointing CNAME
+# Pointing CNAME (Tambah / Lihat / Hapus)
 # =============================================
-pointing_cname() {
-    domain_sub="${1}"
+
+function pointing_cname() {
+    clear
+    echo -e "${c}┌──────────────────────────────────────────┐${NC}"
+    echo -e "${c}│${NC}       ${w}ADD / UPDATE CNAME RECORD${NC}        ${c}│${NC}"
+    echo -e "${c}└──────────────────────────────────────────┘${NC}"
+    echo ""
+
+    read -p "Masukkan domain tujuan (contoh: sub.domain.com): " domain_sub
+    if [[ -z "$domain_sub" ]]; then
+        echo -e "${r}Domain tidak boleh kosong.${NC}"
+        sleep 2
+        return
+    fi
+
     DOMAIN=$(echo "$domain_sub" | cut -d "." -f2-)
     SUB=$(echo "$domain_sub" | cut -d "." -f1)
     SUB_DOMAIN="*.${SUB}.${DOMAIN}"
@@ -307,24 +320,132 @@ pointing_cname() {
     get_zone_id
 
     RECORD_INFO=$(curl -sLX GET "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records?name=${SUB_DOMAIN}" \
-         -H "X-Auth-Email: ${EMAILCF}" \
-         -H "X-Auth-Key: ${KEY}" \
-         -H "Content-Type: application/json")
+        -H "X-Auth-Email: ${EMAILCF}" \
+        -H "X-Auth-Key: ${KEY}" \
+        -H "Content-Type: application/json")
 
     RECORD=$(echo $RECORD_INFO | jq -r .result[0].id)
+    OLD_IP=$(echo $RECORD_INFO | jq -r .result[0].content)
+
     if [[ "${#RECORD}" -le 10 ]]; then
-         curl -sLX POST "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records" \
-         -H "X-Auth-Email: ${EMAILCF}" \
-         -H "X-Auth-Key: ${KEY}" \
-         -H "Content-Type: application/json" \
-         --data '{"type":"CNAME","name":"'${SUB_DOMAIN}'","content":"'${domain_sub}'","ttl":120,"proxied":false}'
+        echo -e "${y}CNAME belum ada, membuat baru...${NC}"
+        RECORD=$(curl -sLX POST "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records" \
+            -H "X-Auth-Email: ${EMAILCF}" \
+            -H "X-Auth-Key: ${KEY}" \
+            -H "Content-Type: application/json" \
+            --data '{"type":"CNAME","name":"'${SUB_DOMAIN}'","content":"'${domain_sub}'","ttl":120,"proxied":false}' | jq -r .result.id)
+        echo -e "${g}CNAME baru berhasil ditambahkan: ${SUB_DOMAIN} → ${domain_sub}${NC}"
     else
-         curl -sLX PUT "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records/${RECORD}" \
-         -H "X-Auth-Email: ${EMAILCF}" \
-         -H "X-Auth-Key: ${KEY}" \
-         -H "Content-Type: application/json" \
-         --data '{"type":"CNAME","name":"'${SUB_DOMAIN}'","content":"'${domain_sub}'","ttl":120,"proxied":false}'
+        echo -e "${y}CNAME sudah ada, memperbarui...${NC}"
+        curl -sLX PUT "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records/${RECORD}" \
+            -H "X-Auth-Email: ${EMAILCF}" \
+            -H "X-Auth-Key: ${KEY}" \
+            -H "Content-Type: application/json" \
+            --data '{"type":"CNAME","name":"'${SUB_DOMAIN}'","content":"'${domain_sub}'","ttl":120,"proxied":false}' >/dev/null
+        echo -e "${g}CNAME diperbarui: ${SUB_DOMAIN} → ${domain_sub}${NC}"
     fi
+    pause
+}
+
+function list_cname() {
+    clear
+    echo -e "${c}┌──────────────────────────────────────────┐${NC}"
+    echo -e "${c}│${NC}        ${w}DAFTAR CNAME RECORD${NC}              ${c}│${NC}"
+    echo -e "${c}└──────────────────────────────────────────┘${NC}"
+    echo ""
+
+    read -p "Masukkan domain utama (contoh: domain.com): " domain
+    if [[ -z "$domain" ]]; then
+        echo -e "${r}Domain tidak boleh kosong.${NC}"
+        sleep 2
+        return
+    fi
+
+    get_zone_id
+    RESPONSE=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records?type=CNAME" \
+        -H "X-Auth-Email: ${EMAILCF}" \
+        -H "X-Auth-Key: ${KEY}" \
+        -H "Content-Type: application/json")
+
+    RESULT=$(echo "$RESPONSE" | jq -r '.result[] | [.name, .content] | @tsv')
+
+    if [[ -z "$RESULT" ]]; then
+        echo -e "${r}Tidak ada record CNAME ditemukan untuk ${domain}.${NC}"
+    else
+        echo -e "${g}Daftar CNAME untuk ${domain}:${NC}"
+        echo "$RESULT" | nl -w2 -s". "
+    fi
+    pause
+}
+
+function delete_cname() {
+    clear
+    echo -e "${c}┌──────────────────────────────────────────┐${NC}"
+    echo -e "${c}│${NC}          ${r}DELETE CNAME RECORD${NC}           ${c}│${NC}"
+    echo -e "${c}└──────────────────────────────────────────┘${NC}"
+    echo ""
+
+    read -p "Masukkan domain utama (contoh: domain.com): " domain
+    if [[ -z "$domain" ]]; then
+        echo -e "${r}Domain tidak boleh kosong.${NC}"
+        sleep 2
+        return
+    fi
+
+    get_zone_id
+    RESPONSE=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records?type=CNAME" \
+        -H "X-Auth-Email: ${EMAILCF}" \
+        -H "X-Auth-Key: ${KEY}" \
+        -H "Content-Type: application/json")
+
+    RESULT=$(echo "$RESPONSE" | jq -r '.result[] | [.id, .name, .content] | @tsv')
+
+    if [[ -z "$RESULT" ]]; then
+        echo -e "${r}Tidak ada record CNAME ditemukan.${NC}"
+        sleep 2
+        return
+    fi
+
+    echo -e "${y}Daftar CNAME Aktif:${NC}"
+    echo ""
+    i=1
+    declare -A CNAME_ID_MAP
+    while IFS=$'\t' read -r id name content; do
+        echo -e "${w}${i})${NC} ${g}${name}${NC} ${y}->${NC} ${c}${content}${NC}"
+        CNAME_ID_MAP[$i]=$id
+        ((i++))
+    done <<< "$RESULT"
+    echo ""
+    echo -e "${r}a)${NC} Hapus semua CNAME"
+    echo -e "${y}x)${NC} Batal"
+    echo ""
+    read -p "Pilih nomor yang ingin dihapus: " choice
+
+    if [[ "$choice" == "a" ]]; then
+        echo -e "${r}Menghapus semua CNAME...${NC}"
+        for id in "${CNAME_ID_MAP[@]}"; do
+            curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records/${id}" \
+                -H "X-Auth-Email: ${EMAILCF}" \
+                -H "X-Auth-Key: ${KEY}" >/dev/null
+        done
+        echo -e "${g}✅ Semua CNAME berhasil dihapus.${NC}"
+
+    elif [[ "$choice" == "x" ]]; then
+        echo -e "${y}Dibatalkan.${NC}"
+
+    elif [[ ${CNAME_ID_MAP[$choice]+_} ]]; then
+        id="${CNAME_ID_MAP[$choice]}"
+        name=$(echo "$RESULT" | awk "NR==$choice {print \$2}")
+        curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records/${id}" \
+            -H "X-Auth-Email: ${EMAILCF}" \
+            -H "X-Auth-Key: ${KEY}" >/dev/null
+        echo -e "${g}✅ CNAME ${name} berhasil dihapus.${NC}"
+
+    else
+        echo -e "${r}Pilihan tidak valid.${NC}"
+    fi
+
+    pause
 }
 
 # =============================================
@@ -354,6 +475,10 @@ main_menu() {
     echo -e "7) Hapus Hostname Mapping"
     echo -e "8) Cek List Worker"
     echo -e "9) Hapus Worker JS"
+    echo -e "${c}│$NC 10.)${y}☞ ${w} Add / Update CNAME${NC}"
+    echo -e "${c}│$NC 11.)${y}☞ ${w} Lihat Daftar CNAME${NC}"
+    echo -e "${c}│$NC 12.)${y}☞ ${w} Hapus CNAME${NC}"
+
     echo -e "x) Keluar"
     echo -ne "\nPilih menu: "
     read opt
@@ -367,6 +492,10 @@ main_menu() {
         7) hapus_mapping ;;
         8) cek_list_worker ;;
         9) hapus_worker_js ;;
+        10 | 10) clear ; pointing_cname ;;
+        11) clear ; list_cname ;;
+        12) clear ; delete_cname ;;
+
         x) exit 0 ;;
         *) echo "Pilihan tidak valid" ;;
     esac
