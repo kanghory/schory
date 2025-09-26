@@ -312,17 +312,40 @@ function pointing_cname() {
     read -p "Masukkan subdomain penuh (contoh: id.vvip-kanghory.my.id): " domain_sub
     [[ -z "$domain_sub" ]] && { echo -e "${r}Subdomain tidak boleh kosong!${NC}"; return 1; }
 
-    # Ambil domain utama (2 label terakhir)
-    DOMAIN=$(echo "$domain_sub" | awk -F '.' '{print $(NF-1)"."$NF}')
+    # Coba deteksi domain utama dari Cloudflare
+    # Kita ambil semua zone yang ada di akun, dan cocokan
+    ZONES_JSON=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?per_page=50" \
+        -H "X-Auth-Email: ${EMAILCF}" \
+        -H "X-Auth-Key: ${KEY}")
+
+    ZONE_NAMES=$(echo "$ZONES_JSON" | jq -r '.result[].name')
+
+    DOMAIN=""
+    for ZN in $ZONE_NAMES; do
+        if [[ "$domain_sub" == *"$ZN" ]]; then
+            DOMAIN="$ZN"
+            break
+        fi
+    done
+
+    if [[ -z "$DOMAIN" ]]; then
+        echo -e "${r}❌ Tidak ditemukan zone Cloudflare untuk ${domain_sub}${NC}"
+        echo "Pastikan domain utama sudah ada di akun Cloudflare."
+        pause
+        return 1
+    fi
+
     SUB=$(echo "$domain_sub" | sed "s/\.${DOMAIN}//")
     SUB_DOMAIN="*.${SUB}.${DOMAIN}"
 
     echo -e "${c}🔍 DEBUG:${NC} domain_sub=${domain_sub}, DOMAIN=${DOMAIN}, SUB=${SUB}, SUB_DOMAIN=${SUB_DOMAIN}"
 
-    domain="$DOMAIN"
-    get_zone_id
-    if [[ -z "$ZONE" ]]; then
+    # Ambil Zone ID
+    ZONE=$(echo "$ZONES_JSON" | jq -r ".result[] | select(.name==\"${DOMAIN}\") | .id")
+
+    if [[ -z "$ZONE" || "$ZONE" == "null" ]]; then
         echo -e "${r}❌ Gagal mendapatkan Zone ID untuk ${DOMAIN}${NC}"
+        pause
         return 1
     fi
 
