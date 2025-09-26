@@ -327,50 +327,67 @@ hapus_worker_js() {
 # =============================================
 
 function pointing_cname() {
-    clear
-    echo -e "${c}┌──────────────────────────────────────────┐${NC}"
-    echo -e "${c}│${NC}       ${w}ADD / UPDATE CNAME RECORD${NC}        ${c}│${NC}"
-    echo -e "${c}└──────────────────────────────────────────┘${NC}"
-    echo ""
+    domain_sub="${1}"
 
-    read -p "Masukkan domain tujuan (contoh: sub.domain.com): " domain_sub
     if [[ -z "$domain_sub" ]]; then
-        echo -e "${r}Domain tidak boleh kosong.${NC}"
-        sleep 2
-        return
+        read -p "Masukkan subdomain penuh (contoh: id.vvip-kanghory.my.id): " domain_sub
+        [[ -z "$domain_sub" ]] && { echo -e "${r}Subdomain tidak boleh kosong!${NC}"; return 1; }
     fi
 
-    DOMAIN=$(echo "$domain_sub" | cut -d "." -f2-)
-    SUB=$(echo "$domain_sub" | cut -d "." -f1)
+    # Pecah domain
+    DOMAIN=$(echo "$domain_sub" | awk -F '.' '{print $(NF-1)"."$NF}')
+    SUB=$(echo "$domain_sub" | sed "s/\.${DOMAIN}//")
+
+    # Buat wildcard subdomain
     SUB_DOMAIN="*.${SUB}.${DOMAIN}"
 
-    get_zone_id
+    # Pastikan login CF & dapat zone ID
+    domain="$DOMAIN"
+    get_zone_id || { echo -e "${r}Gagal mendapatkan Zone ID untuk $DOMAIN${NC}"; return 1; }
 
-    RECORD_INFO=$(curl -sLX GET "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records?name=${SUB_DOMAIN}" \
-        -H "X-Auth-Email: ${EMAILCF}" \
-        -H "X-Auth-Key: ${KEY}" \
-        -H "Content-Type: application/json")
+    echo -e "${y}Menambahkan CNAME record untuk ${SUB_DOMAIN} → ${domain_sub}${NC}"
 
-    RECORD=$(echo $RECORD_INFO | jq -r .result[0].id)
-    OLD_IP=$(echo $RECORD_INFO | jq -r .result[0].content)
+    # Cek apakah record sudah ada
+    RECORD_INFO=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records?type=CNAME&name=${SUB_DOMAIN}" \
+         -H "X-Auth-Email: ${EMAILCF}" \
+         -H "X-Auth-Key: ${KEY}" \
+         -H "Content-Type: application/json")
 
-    if [[ "${#RECORD}" -le 10 ]]; then
-        echo -e "${y}CNAME belum ada, membuat baru...${NC}"
-        RECORD=$(curl -sLX POST "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records" \
-            -H "X-Auth-Email: ${EMAILCF}" \
-            -H "X-Auth-Key: ${KEY}" \
-            -H "Content-Type: application/json" \
-            --data '{"type":"CNAME","name":"'${SUB_DOMAIN}'","content":"'${domain_sub}'","ttl":120,"proxied":false}' | jq -r .result.id)
-        echo -e "${g}CNAME baru berhasil ditambahkan: ${SUB_DOMAIN} → ${domain_sub}${NC}"
+    RECORD_ID=$(echo "$RECORD_INFO" | jq -r '.result[0].id')
+    OLD_CONTENT=$(echo "$RECORD_INFO" | jq -r '.result[0].content')
+
+    if [[ "$RECORD_ID" == "null" || -z "$RECORD_ID" ]]; then
+        # Belum ada → buat baru
+        CREATE_RESP=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records" \
+             -H "X-Auth-Email: ${EMAILCF}" \
+             -H "X-Auth-Key: ${KEY}" \
+             -H "Content-Type: application/json" \
+             --data "{\"type\":\"CNAME\",\"name\":\"${SUB_DOMAIN}\",\"content\":\"${domain_sub}\",\"ttl\":120,\"proxied\":false}")
+
+        SUCCESS=$(echo "$CREATE_RESP" | jq -r '.success')
+        if [[ "$SUCCESS" == "true" ]]; then
+            echo -e "${g}✅ Berhasil menambahkan CNAME: ${SUB_DOMAIN} → ${domain_sub}${NC}"
+        else
+            echo -e "${r}❌ Gagal menambahkan CNAME:${NC}"
+            echo "$CREATE_RESP" | jq .
+        fi
     else
-        echo -e "${y}CNAME sudah ada, memperbarui...${NC}"
-        curl -sLX PUT "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records/${RECORD}" \
-            -H "X-Auth-Email: ${EMAILCF}" \
-            -H "X-Auth-Key: ${KEY}" \
-            -H "Content-Type: application/json" \
-            --data '{"type":"CNAME","name":"'${SUB_DOMAIN}'","content":"'${domain_sub}'","ttl":120,"proxied":false}' >/dev/null
-        echo -e "${g}CNAME diperbarui: ${SUB_DOMAIN} → ${domain_sub}${NC}"
+        # Sudah ada → update
+        UPDATE_RESP=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records/${RECORD_ID}" \
+             -H "X-Auth-Email: ${EMAILCF}" \
+             -H "X-Auth-Key: ${KEY}" \
+             -H "Content-Type: application/json" \
+             --data "{\"type\":\"CNAME\",\"name\":\"${SUB_DOMAIN}\",\"content\":\"${domain_sub}\",\"ttl\":120,\"proxied\":false}")
+
+        SUCCESS=$(echo "$UPDATE_RESP" | jq -r '.success')
+        if [[ "$SUCCESS" == "true" ]]; then
+            echo -e "${g}✅ CNAME diperbarui: ${SUB_DOMAIN} → ${domain_sub}${NC}"
+        else
+            echo -e "${r}❌ Gagal memperbarui CNAME:${NC}"
+            echo "$UPDATE_RESP" | jq .
+        fi
     fi
+
     pause
 }
 
