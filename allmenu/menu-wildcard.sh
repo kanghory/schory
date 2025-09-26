@@ -302,6 +302,89 @@ function del_wc() {
     menu_wc
 }
 
+# ✅ Tambahan Baru: Delete Worker Domain via API
+list_and_delete_worker() {
+    clear
+    echo -e "${c}┌──────────────────────────────────────┐${NC}"
+    echo -e "${c}│${NC}   ${r}DELETE WORKER DOMAIN${NC}               ${c}│${NC}"
+    echo -e "${c}└──────────────────────────────────────┘${NC}"
+
+    get_account_id
+
+    echo -e "${y}Mengambil daftar worker dari Cloudflare...${NC}"
+    response=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/scripts" \
+        -H "X-Auth-Email: $EMAILCF" \
+        -H "X-Auth-Key: $KEY" \
+        -H "Content-Type: application/json")
+
+    success=$(echo "$response" | jq -r '.success')
+
+    if [[ "$success" != "true" ]]; then
+        echo -e "${r}Gagal mengambil daftar worker.${NC}"
+        echo "$response" | jq
+        read -p "Tekan enter untuk kembali..." zz
+        menu_wc
+        return
+    fi
+
+    total=$(echo "$response" | jq '.result | length')
+    if [[ "$total" -eq 0 ]]; then
+        echo -e "${r}Tidak ada worker ditemukan.${NC}"
+        read -p "Tekan enter untuk kembali..." zz
+        menu_wc
+        return
+    fi
+
+    echo -e "${c}Daftar Worker Tersedia:${NC}"
+    for ((i=0; i<total; i++)); do
+        name=$(echo "$response" | jq -r ".result[$i].id")
+        echo "$((i+1)). $name"
+    done
+
+    echo
+    echo -e "${y}a) Hapus semua worker${NC}"
+    echo -e "${y}x) Batal${NC}"
+    echo
+    read -p "Masukkan nomor worker yang ingin dihapus: " pilihan
+
+    case "$pilihan" in
+        x|X)
+            echo -e "${y}Dibatalkan.${NC}"
+            sleep 1
+            menu_wc
+            ;;
+        a|A)
+            read -p "Yakin ingin hapus SEMUA worker? (y/n): " konfirm
+            if [[ "$konfirm" == "y" || "$konfirm" == "Y" ]]; then
+                for ((i=0; i<total; i++)); do
+                    WORKER_NAME=$(echo "$response" | jq -r ".result[$i].id")
+                    echo -e "${y}Menghapus $WORKER_NAME ...${NC}"
+                    hapus_worker "$WORKER_NAME"
+                done
+                echo -e "${g}Semua worker berhasil dihapus.${NC}"
+            else
+                echo -e "${y}Dibatalkan.${NC}"
+            fi
+            read -p "Tekan enter untuk kembali..." zz
+            menu_wc
+            ;;
+        *)
+            if ! [[ "$pilihan" =~ ^[0-9]+$ ]] || (( pilihan < 1 || pilihan > total )); then
+                echo -e "${r}Nomor tidak valid!${NC}"
+                sleep 2
+                menu_wc
+                return
+            fi
+            WORKER_NAME=$(echo "$response" | jq -r ".result[$((pilihan-1))].id")
+            echo -e "${y}Menghapus worker ${WORKER_NAME}...${NC}"
+            hapus_worker "$WORKER_NAME"
+            echo -e "${g}Worker ${WORKER_NAME} berhasil dihapus.${NC}"
+            read -p "Tekan enter untuk kembali..." zz
+            menu_wc
+            ;;
+    esac
+}
+
 function menu_wc() {
     clear
     lane_atas
@@ -322,6 +405,7 @@ function menu_wc() {
     echo -e "${c}│$NC 4.)${y}☞ ${w} Delete Wildcard${NC}"
     echo -e "${c}│$NC 5.)${y}☞ ${w} Add or edit bug Wildcard${NC}"
     echo -e "${c}│$NC 6.)${y}☞ ${w} Lihat List Aktif${NC}"
+    echo -e "${c}│$NC 7.)${y}☞ ${w} Delete Worker Domain (API)${NC}"
     echo -e "${c}│$NC x.)${y}☞ ${r} Exit${NC}"
     lane_bawah
     echo
@@ -343,6 +427,7 @@ function menu_wc() {
         menu_wc
     ;;
     06 | 6) clear ; lihat_list ;;
+    07 | 7) list_and_delete_worker ;;
     x | X) exit 0 ;;
     *) clear ; $0 ;;
     esac
