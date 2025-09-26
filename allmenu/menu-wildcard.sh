@@ -305,29 +305,36 @@ function del_wc() {
 # ✅ Tambahan Baru: Delete Worker Domain via API
 list_and_delete_worker() {
     clear
-    echo -e "${c}┌──────────────────────────────────────┐${NC}"
-    echo -e "${c}│${NC}   ${r}DELETE WORKER DOMAIN${NC}               ${c}│${NC}"
-    echo -e "${c}└──────────────────────────────────────┘${NC}"
+    echo -e "${c}┌────────────────────────────────────────────┐${NC}"
+    echo -e "${c}│${NC}   ${r}DELETE WORKER DOMAIN${NC} - Beserta Bug${c} │${NC}"
+    echo -e "${c}└────────────────────────────────────────────┘${NC}"
 
     get_account_id
 
-    echo -e "${y}Mengambil daftar worker dari Cloudflare...${NC}"
-    response=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/scripts" \
+    echo -e "${y}Mengambil daftar worker dan domain...${NC}"
+
+    # Ambil daftar worker
+    workers=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/scripts" \
         -H "X-Auth-Email: $EMAILCF" \
         -H "X-Auth-Key: $KEY" \
         -H "Content-Type: application/json")
 
-    success=$(echo "$response" | jq -r '.success')
+    # Ambil daftar domain mapping
+    mappings=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/domains" \
+        -H "X-Auth-Email: $EMAILCF" \
+        -H "X-Auth-Key: $KEY" \
+        -H "Content-Type: application/json")
 
+    success=$(echo "$workers" | jq -r '.success')
     if [[ "$success" != "true" ]]; then
         echo -e "${r}Gagal mengambil daftar worker.${NC}"
-        echo "$response" | jq
+        echo "$workers" | jq
         read -p "Tekan enter untuk kembali..." zz
         menu_wc
         return
     fi
 
-    total=$(echo "$response" | jq '.result | length')
+    total=$(echo "$workers" | jq '.result | length')
     if [[ "$total" -eq 0 ]]; then
         echo -e "${r}Tidak ada worker ditemukan.${NC}"
         read -p "Tekan enter untuk kembali..." zz
@@ -335,10 +342,14 @@ list_and_delete_worker() {
         return
     fi
 
-    echo -e "${c}Daftar Worker Tersedia:${NC}"
+    echo -e "${c}Daftar Worker & Bug Terkait:${NC}"
+    declare -A WORKER_MAP
     for ((i=0; i<total; i++)); do
-        name=$(echo "$response" | jq -r ".result[$i].id")
-        echo "$((i+1)). $name"
+        wname=$(echo "$workers" | jq -r ".result[$i].id")
+        bug=$(echo "$mappings" | jq -r ".result[] | select(.service==\"$wname\") | .hostname" | paste -sd "," -)
+        [[ -z "$bug" || "$bug" == "null" ]] && bug="(tidak ada bug)"
+        WORKER_MAP[$((i+1))]="$wname"
+        echo "$((i+1)). $wname  ${y}[$bug]${NC}"
     done
 
     echo
@@ -357,7 +368,7 @@ list_and_delete_worker() {
             read -p "Yakin ingin hapus SEMUA worker? (y/n): " konfirm
             if [[ "$konfirm" == "y" || "$konfirm" == "Y" ]]; then
                 for ((i=0; i<total; i++)); do
-                    WORKER_NAME=$(echo "$response" | jq -r ".result[$i].id")
+                    WORKER_NAME=$(echo "$workers" | jq -r ".result[$i].id")
                     echo -e "${y}Menghapus $WORKER_NAME ...${NC}"
                     hapus_worker "$WORKER_NAME"
                 done
@@ -375,7 +386,7 @@ list_and_delete_worker() {
                 menu_wc
                 return
             fi
-            WORKER_NAME=$(echo "$response" | jq -r ".result[$((pilihan-1))].id")
+            WORKER_NAME="${WORKER_MAP[$pilihan]}"
             echo -e "${y}Menghapus worker ${WORKER_NAME}...${NC}"
             hapus_worker "$WORKER_NAME"
             echo -e "${g}Worker ${WORKER_NAME} berhasil dihapus.${NC}"
