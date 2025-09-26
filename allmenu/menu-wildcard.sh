@@ -108,30 +108,13 @@ get_account_id() {
 }
 
 # Ambil Zone ID Berdasarkan Domain
-function get_zone_id() {
-    if [[ -z "$EMAILCF" || -z "$KEY" ]]; then
-        echo -e "${r}⚠️  Anda belum login Cloudflare.${NC}"
-        return 1
-    fi
-
-    if [[ -z "$domain" ]]; then
-        echo -e "${r}⚠️  Variabel domain kosong. Pastikan Anda mengisi domain utama terlebih dahulu.${NC}"
-        return 1
-    fi
-
+get_zone_id() {
     RESPONSE=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=${domain}" \
         -H "X-Auth-Email: ${EMAILCF}" \
         -H "X-Auth-Key: ${KEY}" \
         -H "Content-Type: application/json")
-
     ZONE=$(echo "$RESPONSE" | jq -r '.result[0].id')
-
-    if [[ "$ZONE" == "null" || -z "$ZONE" ]]; then
-        echo -e "${r}⚠️  Gagal mendapatkan Zone ID untuk domain: ${domain}${NC}"
-        return 1
-    fi
-
-    export ZONE
+    [[ -z "$ZONE" || "$ZONE" == "null" ]] && return 1
 }
 
 # =============================================
