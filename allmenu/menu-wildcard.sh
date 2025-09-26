@@ -305,61 +305,72 @@ hapus_worker_js() {
     pause
 }
 
-# =============================================
-# Pointing CNAME (Tambah / Lihat / Hapus)
-# =============================================
-function pointing_cname() {
-    read -p "Masukkan subdomain penuh (contoh: id.vvip-kanghory.my.id): " domain_sub
-    [[ -z "$domain_sub" ]] && { echo -e "${r}Subdomain tidak boleh kosong!${NC}"; return 1; }
+# ============================================
+# 🔁 POINTING CNAME MANAGER (ADD / LIST / DELETE)
+# ============================================
 
-    # Coba deteksi domain utama dari Cloudflare
-    # Kita ambil semua zone yang ada di akun, dan cocokan
+function get_zone_longest_match() {
+    domain_sub="$1"
+
     ZONES_JSON=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?per_page=50" \
         -H "X-Auth-Email: ${EMAILCF}" \
         -H "X-Auth-Key: ${KEY}")
 
-    ZONE_NAMES=$(echo "$ZONES_JSON" | jq -r '.result[].name')
+    ZONE_NAMES=($(echo "$ZONES_JSON" | jq -r '.result[].name'))
+    BEST_MATCH=""
+    BEST_LEN=0
 
-    DOMAIN=""
-    for ZN in $ZONE_NAMES; do
+    for ZN in "${ZONE_NAMES[@]}"; do
         if [[ "$domain_sub" == *"$ZN" ]]; then
-            DOMAIN="$ZN"
-            break
+            LEN=${#ZN}
+            if (( LEN > BEST_LEN )); then
+                BEST_MATCH="$ZN"
+                BEST_LEN=$LEN
+            fi
         fi
     done
 
-    if [[ -z "$DOMAIN" ]]; then
-        echo -e "${r}❌ Tidak ditemukan zone Cloudflare untuk ${domain_sub}${NC}"
-        echo "Pastikan domain utama sudah ada di akun Cloudflare."
-        pause
-        return 1
+    if [[ -z "$BEST_MATCH" ]]; then
+        echo ""
+    else
+        echo "$BEST_MATCH"
     fi
+}
+
+function pointing_cname_add() {
+    clear
+    echo -e "${c}POINTING CNAME - ADD RECORD${NC}"
+    echo -e "└──────────────────────────────────────────┘"
+    read -p "Masukkan subdomain penuh (contoh: id.vvip-kanghory.my.id): " domain_sub
+    [[ -z "$domain_sub" ]] && { echo -e "${r}❌ Subdomain tidak boleh kosong${NC}"; pause; return; }
+
+    DOMAIN=$(get_zone_longest_match "$domain_sub")
+
+    if [[ -z "$DOMAIN" ]]; then
+        echo -e "${r}❌ Tidak ditemukan zone untuk ${domain_sub}${NC}"
+        pause
+        return
+    fi
+
+    ZONES_JSON=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$DOMAIN" \
+        -H "X-Auth-Email: ${EMAILCF}" \
+        -H "X-Auth-Key: ${KEY}")
+    ZONE=$(echo "$ZONES_JSON" | jq -r '.result[0].id')
 
     SUB=$(echo "$domain_sub" | sed "s/\.${DOMAIN}//")
     SUB_DOMAIN="*.${SUB}.${DOMAIN}"
 
-    echo -e "${c}🔍 DEBUG:${NC} domain_sub=${domain_sub}, DOMAIN=${DOMAIN}, SUB=${SUB}, SUB_DOMAIN=${SUB_DOMAIN}"
-
-    # Ambil Zone ID
-    ZONE=$(echo "$ZONES_JSON" | jq -r ".result[] | select(.name==\"${DOMAIN}\") | .id")
-
-    if [[ -z "$ZONE" || "$ZONE" == "null" ]]; then
-        echo -e "${r}❌ Gagal mendapatkan Zone ID untuk ${DOMAIN}${NC}"
-        pause
-        return 1
-    fi
-
-    echo -e "${y}Menambahkan CNAME record untuk ${SUB_DOMAIN} → ${domain_sub}${NC}"
+    echo -e "${y}Menambahkan CNAME: ${SUB_DOMAIN} → ${domain_sub}${NC}"
 
     CREATE_RESP=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${ZONE}/dns_records" \
-         -H "X-Auth-Email: ${EMAILCF}" \
-         -H "X-Auth-Key: ${KEY}" \
-         -H "Content-Type: application/json" \
-         --data "{\"type\":\"CNAME\",\"name\":\"${SUB_DOMAIN}\",\"content\":\"${domain_sub}\",\"ttl\":120,\"proxied\":false}")
+        -H "X-Auth-Email: ${EMAILCF}" \
+        -H "X-Auth-Key: ${KEY}" \
+        -H "Content-Type: application/json" \
+        --data "{\"type\":\"CNAME\",\"name\":\"${SUB_DOMAIN}\",\"content\":\"${domain_sub}\",\"ttl\":120,\"proxied\":false}")
 
     SUCCESS=$(echo "$CREATE_RESP" | jq -r '.success')
     if [[ "$SUCCESS" == "true" ]]; then
-        echo -e "${g}✅ Berhasil menambahkan CNAME: ${SUB_DOMAIN} → ${domain_sub}${NC}"
+        echo -e "${g}✅ Berhasil menambahkan CNAME${NC}"
     else
         echo -e "${r}❌ Gagal menambahkan CNAME${NC}"
         echo "$CREATE_RESP" | jq .
@@ -367,6 +378,7 @@ function pointing_cname() {
 
     pause
 }
+
 
 function list_cname() {
     clear
