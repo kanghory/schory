@@ -337,7 +337,7 @@ function get_zone_longest_match() {
     fi
 }
 
-function pointing_cname_add() {
+function pointing_cname() {
     clear
     echo -e "${c}POINTING CNAME - ADD RECORD${NC}"
     echo -e "└──────────────────────────────────────────┘"
