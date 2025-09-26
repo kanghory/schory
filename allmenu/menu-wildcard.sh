@@ -1,417 +1,310 @@
 #!/bin/bash
-#
-# Cloudflare Worker Manager - Final Fix
-# Menu:
-# 1 Add akun cloudflare
-# 2 Hapus akun cloudflare
-# 3 Add bug (bug.txt)
-# 4 Add worker js
-# 5 Add hostname berdasarkan worker js (dari bug.txt)
-# 6 Cek list hostname mapping yang aktif
-# 7 Hapus hostname mapping sesuai worker js / hostname
-# 8 Cek list worker js yang aktif beserta hostnamenya
-# 9 Hapus worker js (pilih 1 atau all)
-#
 
-# ---------- Colors ----------
+# ────────────────🎨 WARNA ────────────────
 NC='\033[0m'
-r='\033[1;91m'
-g='\033[1;92m'
-y='\033[1;93m'
-c='\033[0;96m'
-w='\033[1;97m'
+R='\033[1;91m'
+G='\033[1;92m'
+Y='\033[1;93m'
+C='\033[1;96m'
+W='\033[1;97m'
+U='\033[0;35m'
 
-# ---------- Paths ----------
-DATA_DIR="/etc/.data"
-mkdir -p /etc/.wc
-BUG_FILE="/etc/.wc/bug.txt"
-AKUN_FILE="$DATA_DIR/akun"   # store "EMAIL|KEY"
-
-# ---------- Utils ----------
-pause() { read -p "Tekan Enter untuk lanjut..." -r; }
-require_cmds() {
-    for cmd in curl jq; do
-        if ! command -v $cmd >/dev/null 2>&1; then
-            echo -e "${r}Perlu menginstall: $cmd${NC}"
-            exit 1
-        fi
-    done
-}
-require_cmds
-
-# ---------- Load saved account if ada ----------
-if [[ -f "$AKUN_FILE" ]]; then
-    EMAILCF=$(cut -d'|' -f1 "$AKUN_FILE")
-    KEY=$(cut -d'|' -f2 "$AKUN_FILE")
+# ────────────────⚙️ KONFIGURASI ────────────────
+ENV_FILE=".env"
+if [ -f "$ENV_FILE" ]; then
+    source "$ENV_FILE"
+else
+    touch "$ENV_FILE"
 fi
 
-# ---------- CF helpers ----------
+# ────────────────🔐 AUTH CF ────────────────
 get_account_id() {
-    if [[ -z "$EMAILCF" || -z "$KEY" ]]; then
-        echo -e "${r}Belum ada akun Cloudflare, silakan pilih menu 1 untuk menambah.${NC}"
-        return 1
-    fi
+    response=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts" \
+        -H "X-Auth-Email: $EMAILCF" \
+        -H "X-Auth-Key: $KEY")
 
-    resp=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts" \
-        -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY" -H "Content-Type: application/json")
-
-    AKUNID=$(echo "$resp" | jq -r '.result[0].id // empty')
-    success=$(echo "$resp" | jq -r '.success // false')
-
-    if [[ "$success" != "true" || -z "$AKUNID" ]]; then
-        echo -e "${r}Gagal mendapatkan Account ID. Cek kredensial.${NC}"
+    AKUNID=$(echo "$response" | jq -r '.result[0].id')
+    if [[ "$AKUNID" == "null" || -z "$AKUNID" ]]; then
+        echo -e "${R}Gagal mendapatkan Account ID! Pastikan API Key dan Email benar.${NC}"
         return 1
     fi
     return 0
 }
 
-# ---------- Menu 1 ----------
-add_akun_cf() {
-    clear
-    echo -e "${c}Tambah Akun Cloudflare${NC}"
-    read -p "Email Cloudflare  : " EMAILCF
-    read -p "Global API Key    : " KEY
+check_login_status() {
     if [[ -z "$EMAILCF" || -z "$KEY" ]]; then
-        echo -e "${r}Email atau Key kosong.${NC}"
-        pause
-        return
-    fi
-    mkdir -p "$DATA_DIR"
-    echo "${EMAILCF}|${KEY}" > "$AKUN_FILE"
-    chmod 600 "$AKUN_FILE"
-    echo -e "${g}Akun disimpan.${NC}"
-    pause
-}
-
-# ---------- Menu 2 ----------
-del_akun_cf() {
-    clear
-    echo -e "${r}Hapus Akun Cloudflare${NC}"
-    if [[ -f "$AKUN_FILE" ]]; then
-        rm -f "$AKUN_FILE"
-        unset EMAILCF KEY AKUNID
-        echo -e "${g}Akun dihapus.${NC}"
+        LOGIN_STATUS="${R}Belum Login${NC}"
     else
-        echo -e "${y}Belum ada akun tersimpan.${NC}"
+        resp=$(curl -s -o /dev/null -w "%{http_code}" -X GET "https://api.cloudflare.com/client/v4/user" \
+            -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY")
+        if [ "$resp" == "200" ]; then
+            LOGIN_STATUS="${G}Login Berhasil${NC} (${EMAILCF})"
+        else
+            LOGIN_STATUS="${R}Login Gagal / Invalid API${NC}"
+        fi
     fi
-    pause
 }
 
-# ---------- Menu 3 ----------
-add_bug() {
-    clear
-    echo -e "${c}Tambah / Edit bug.txt (satu domain per baris)${NC}"
-    echo -e "${c}Lokasi: ${BUG_FILE}${NC}"
-    mkdir -p "$(dirname "$BUG_FILE")"
-    # open editor
-    nano "$BUG_FILE"
-    echo -e "${g}Selesai edit.${NC}"
-    pause
-}
-
-# ---------- Utility: random worker name ----------
+# ────────────────🧩 UTIL ────────────────
 generate_random() {
-    WORKER_NAME="wk-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)"
+    WORKER_NAME=$(tr -dc 'a-z0-9' </dev/urandom | head -c 8)
 }
 
-# ---------- Menu 4: buat worker JS ----------
-buat_worker() {
+pause() {
+    echo -ne "\n${Y}Tekan Enter untuk kembali ke menu...${NC}"
+    read
+}
+
+clear_screen() {
     clear
-    echo -e "${c}Buat Worker JS (Hello World)${NC}"
-    get_account_id || { pause; return; }
+}
+
+# ────────────────🔑 AKUN CLOUDFLARE ────────────────
+add_account() {
+    echo -e "${C}Masukkan Email Cloudflare:${NC}"
+    read EMAIL
+    echo -e "${C}Masukkan API Key Cloudflare:${NC}"
+    read KEYCF
+
+    echo "EMAILCF=\"$EMAIL\"" >"$ENV_FILE"
+    echo "KEY=\"$KEYCF\"" >>"$ENV_FILE"
+
+    source "$ENV_FILE"
+    echo -e "${G}Akun berhasil ditambahkan & tersimpan di .env${NC}"
+}
+
+delete_account() {
+    rm -f "$ENV_FILE"
+    unset EMAILCF
+    unset KEY
+    echo -e "${G}Akun Cloudflare berhasil dihapus.${NC}"
+}
+
+# ────────────────🐞 BUG MANAGEMENT ────────────────
+add_bug() {
+    echo -e "${C}Masukkan daftar bug (pisahkan dengan enter, ketik 'done' jika selesai):${NC}"
+    >bug.txt
+    while true; do
+        read bug
+        [[ "$bug" == "done" ]] && break
+        echo "$bug" >>bug.txt
+    done
+    echo -e "${G}Daftar bug tersimpan di bug.txt${NC}"
+}
+
+# ────────────────⚙️ WORKER JS ────────────────
+buat_worker() {
     generate_random
+    get_account_id || return
 
     WORKER_SCRIPT="
 addEventListener('fetch', event => {
-  event.respondWith(handleRequest(event.request))
+    event.respondWith(handleRequest(event.request))
 })
+
 async function handleRequest(request) {
-  return new Response('Hello World!', { status: 200 })
+    return new Response('Hello World!', { status: 200 })
 }
 "
     URL="https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/scripts/$WORKER_NAME"
-    resp=$(curl -s -w "\n%{http_code}" -o /tmp/cf_resp.json -X PUT "$URL" \
-        -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY" \
-        -H "Content-Type: application/javascript" --data "$WORKER_SCRIPT")
+    response=$(curl -s -w "%{http_code}" -o response.json -X PUT \
+        -H "X-Auth-Email: $EMAILCF" \
+        -H "X-Auth-Key: $KEY" \
+        -H "Content-Type: application/javascript" \
+        --data "$WORKER_SCRIPT" \
+        "$URL")
 
-    code=$(tail -n1 <<< "$resp")
-    if [[ "$code" == "200" || "$code" == "201" ]]; then
-        echo -e "${g}Success: Worker dibuat -> ${w}$WORKER_NAME${NC}"
+    httpCode=$(tail -n1 <<<"$response")
+
+    if [ "$httpCode" -eq 200 ]; then
+        echo -e "${G}Worker berhasil dibuat: ${W}$WORKER_NAME${NC}"
     else
-        echo -e "${r}Gagal membuat worker. HTTP $code${NC}"
-        jq . /tmp/cf_resp.json 2>/dev/null || cat /tmp/cf_resp.json
+        echo -e "${R}Gagal Membuat Worker '$WORKER_NAME' (Kode: $httpCode)${NC}"
+        cat response.json
     fi
-    rm -f /tmp/cf_resp.json
-    pause
+    rm -f response.json
 }
 
-# ---------- add_domain_worker: bind hostname ke worker (POST /workers/domains) ----------
-add_domain_worker_single() {
-    # params: worker_name hostname
-    local workername="$1"; local hostname="$2"
-    DATA=$(cat <<EOF
-{"hostname":"$hostname","service":"$workername","environment":"production"}
-EOF
-)
-    RESP=$(curl -s -w "\n%{http_code}" -o /tmp/cf_resp.json -X POST \
-        "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/domains" \
-        -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY" -H "Content-Type: application/json" \
-        -d "$DATA")
-    CODE=$(tail -n1 <<< "$RESP")
-    if [[ "$CODE" == "200" || "$CODE" == "201" ]]; then
-        echo -e "${g}✓ $hostname -> $workername${NC}"
-        return 0
-    else
-        echo -e "${r}✗ Gagal: $hostname (HTTP $CODE)${NC}"
-        jq . /tmp/cf_resp.json 2>/dev/null || cat /tmp/cf_resp.json
-        return 1
-    fi
-}
-
-# ---------- Menu 5: Add hostname berdasarkan worker js (loop bug.txt) ----------
-add_domain_worker() {
-    clear
-    echo -e "${c}Add Hostname Berdasarkan bug.txt ke Worker Terpilih${NC}"
-    get_account_id || { pause; return; }
-
-    # ambil workers
-    WORKERS_JSON=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/scripts" \
-        -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY")
-    WORKERS_LIST=$(echo "$WORKERS_JSON" | jq -r '.result[]?.id' )
-
-    if [[ -z "$WORKERS_LIST" ]]; then
-        echo -e "${r}Tidak ada worker terdeteksi. Buat worker dulu (menu 4).${NC}"
-        pause; return
-    fi
-
-    echo -e "${y}Pilih worker target:${NC}"
-    select pick in $WORKERS_LIST; do
-        if [[ -n "$pick" ]]; then
-            WORKER_NAME="$pick"
-            break
-        fi
-    done
-
-    if [[ ! -f "$BUG_FILE" ]]; then
-        echo -e "${r}File bug.txt tidak ditemukan. Tambah dulu (menu 3).${NC}"
-        pause; return
-    fi
-
-    echo -e "${y}Menambahkan hostname dari bug.txt ke worker: ${w}$WORKER_NAME${NC}"
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        host=$(echo "$line" | tr -d '\r' | xargs)
-        [[ -z "$host" ]] && continue
-        add_domain_worker_single "$WORKER_NAME" "$host"
-    done < "$BUG_FILE"
-
-    pause
-}
-
-# ---------- Menu 6: cek list hostname mapping ----------
-cek_mapping() {
-    clear
-    echo -e "${c}List Hostname Mapping Aktif${NC}"
-    get_account_id || { pause; return; }
-    curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/domains" \
-        -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY" | jq -r '.result[] | "id: \(.id)  hostname: \(.hostname)  -> service: \(.service)"'
-    pause
-}
-
-# ---------- Menu 7: hapus hostname mapping sesuai worker js / hostname ----------
-hapus_mapping() {
-    clear
-    echo -e "${c}Hapus Hostname Mapping${NC}"
-    get_account_id || { pause; return; }
-
-    # ambil mappings with id
-    MAPS_JSON=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/domains" \
-        -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY")
-
-    # prepare list
-    mapcount=$(echo "$MAPS_JSON" | jq '.result | length')
-    if [[ "$mapcount" -eq 0 ]]; then
-        echo -e "${y}Tidak ada mapping aktif.${NC}"
-        pause; return
-    fi
-
-    declare -A MAP_ID HOST SERV
-    i=1
-    echo -e "${y}Daftar mapping:${NC}"
-    while read -r id hostname service; do
-        echo "$i) $hostname -> $service (id:$id)"
-        MAP_ID[$i]="$id"
-        HOST[$i]="$hostname"
-        SERV[$i]="$service"
-        ((i++))
-    done < <(echo "$MAPS_JSON" | jq -r '.result[] | "\(.id) \(.hostname) \(.service)"')
-
-    echo "a) Hapus semua mapping"
-    echo "x) Batal"
-    read -p "Pilih yang akan dihapus: " pil
-    if [[ "$pil" == "x" || "$pil" == "X" ]]; then
-        echo "Dibatalkan."
-        pause; return
-    fi
-
-    if [[ "$pil" == "a" || "$pil" == "A" ]]; then
-        echo -e "${r}Menghapus semua mapping...${NC}"
-        for idx in "${!MAP_ID[@]}"; do
-            id="${MAP_ID[$idx]}"
-            curl -s -X DELETE "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/domains/$id" \
-                -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY" >/dev/null
-            echo -e "${g}Removed: ${HOST[$idx]} -> ${SERV[$idx]}${NC}"
-        done
-        pause; return
-    fi
-
-    if [[ -n "${MAP_ID[$pil]}" ]]; then
-        id="${MAP_ID[$pil]}"
-        hostname="${HOST[$pil]}"
-        service="${SERV[$pil]}"
-        curl -s -X DELETE "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/domains/$id" \
-            -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY" >/dev/null
-        echo -e "${g}Mapping $hostname -> $service dihapus.${NC}"
-    else
-        echo -e "${r}Pilihan tidak valid.${NC}"
-    fi
-    pause
-}
-
-# ---------- Menu 8: cek worker js beserta hostname ----------
-cek_worker_host() {
-    clear
-    echo -e "${c}List Worker JS dengan Hostname${NC}"
-    get_account_id || { pause; return; }
-
-    WORKERS_JSON=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/scripts" \
-        -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY")
-    MAPS_JSON=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/domains" \
-        -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY")
-
-    workers=$(echo "$WORKERS_JSON" | jq -r '.result[]?.id')
-    if [[ -z "$workers" ]]; then
-        echo -e "${y}Tidak ada worker terdeteksi.${NC}"
-        pause; return
-    fi
-
-    for w in $workers; do
-        echo -e "${g}$w${NC}"
-        hosts=$(echo "$MAPS_JSON" | jq -r --arg svc "$w" '.result[] | select(.service==$svc) | .hostname' | paste -sd "," -)
-        if [[ -z "$hosts" ]]; then
-            echo "  ↳ (tidak ada hostname)"
-        else
-            IFS=',' read -ra HARR <<< "$hosts"
-            for h in "${HARR[@]}"; do
-                echo "  ↳ $h"
-            done
-        fi
-    done
-    pause
-}
-
-# ---------- Menu 9: hapus worker js (gunakan hapus worker API) ----------
 hapus_worker() {
-    WORKER_NAME="$1"
-    get_account_id || { echo -e "${r}Gagal: akun tidak tersedia.${NC}"; return 1; }
+    get_account_id || return
+    echo -e "${C}Mengambil daftar worker dari Cloudflare...${NC}"
+    workers=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/scripts" \
+        -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY" | jq -r '.result[].id')
 
-    URL="https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/scripts/$WORKER_NAME"
-    resp=$(curl -s -w "\n%{http_code}" -o /tmp/cf_resp.json -X DELETE "$URL" \
-        -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY")
-    code=$(tail -n1 <<< "$resp")
-    if [[ "$code" == "200" || "$code" == "204" ]]; then
-        echo -e "${g}Worker $WORKER_NAME berhasil dihapus.${NC}"
-        rm -f /tmp/cf_resp.json
-        return 0
-    else
-        echo -e "${r}Gagal menghapus worker $WORKER_NAME (HTTP $code)${NC}"
-        jq . /tmp/cf_resp.json 2>/dev/null || cat /tmp/cf_resp.json
-        rm -f /tmp/cf_resp.json
-        return 1
-    fi
-}
-
-hapus_worker_menu() {
-    clear
-    echo -e "${c}Hapus Worker JS${NC}"
-    get_account_id || { pause; return; }
-
-    WORKERS_JSON=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/scripts" \
-        -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY")
-    workers=$(echo "$WORKERS_JSON" | jq -r '.result[]?.id')
-
-    if [[ -z "$workers" ]]; then
-        echo -e "${y}Tidak ada worker terdeteksi.${NC}"
-        pause; return
+    if [ -z "$workers" ]; then
+        echo -e "${Y}Tidak ada worker ditemukan.${NC}"
+        return
     fi
 
+    echo -e "\n${U}Daftar Worker Tersedia:${NC}"
     i=1
-    declare -A WMAP
-    echo -e "${y}Daftar Worker:${NC}"
     for w in $workers; do
         echo "$i) $w"
-        WMAP[$i]="$w"
         ((i++))
     done
-
-    echo "a) Hapus semua worker"
+    echo "a) Hapus semua"
     echo "x) Batal"
-    read -p "Pilih worker yang mau dihapus: " pil
-    if [[ "$pil" == "x" || "$pil" == "X" ]]; then
-        echo "Dibatalkan."
-        pause; return
+    echo -ne "${C}Pilih: ${NC}"
+    read opt
+
+    if [[ "$opt" == "x" ]]; then return; fi
+
+    if [[ "$opt" == "a" ]]; then
+        for w in $workers; do
+            hapus_worker "$w"
+        done
+        return
     fi
 
-    if [[ "$pil" == "a" || "$pil" == "A" ]]; then
-        read -p "Konfirmasi hapus SEMUA worker? (y/n): " conf
-        if [[ "$conf" == "y" || "$conf" == "Y" ]]; then
-            for idx in "${!WMAP[@]}"; do
-                name="${WMAP[$idx]}"
-                echo -e "${y}Menghapus $name ...${NC}"
-                hapus_worker "$name"
-            done
+    selected=$(echo "$workers" | sed -n "${opt}p")
+    if [ -n "$selected" ]; then
+        echo -e "${C}Menghapus worker: $selected${NC}"
+        URL="https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/scripts/$selected"
+        resp=$(curl -s -w "%{http_code}" -o response.json -X DELETE \
+            -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY" "$URL")
+        code=$(tail -n1 <<<"$resp")
+        if [ "$code" -eq 200 ]; then
+            echo -e "${G}Berhasil hapus $selected${NC}"
+        else
+            echo -e "${R}Gagal hapus $selected${NC}"
+            cat response.json
         fi
-        pause; return
+        rm -f response.json
+    fi
+}
+
+# ────────────────🌐 HOSTNAME MAPPING ────────────────
+add_domain_worker() {
+    get_account_id || return
+    echo -e "${C}Memetakan bug.txt ke worker aktif...${NC}"
+
+    if [ ! -f bug.txt ]; then
+        echo -e "${R}bug.txt tidak ditemukan!${NC}"
+        return
     fi
 
-    if [[ -n "${WMAP[$pil]}" ]]; then
-        hapus_worker "${WMAP[$pil]}"
-    else
-        echo -e "${r}Pilihan tidak valid.${NC}"
+    echo -e "${C}Daftar Worker Aktif:${NC}"
+    workers=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/scripts" \
+        -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY" | jq -r '.result[].id')
+    echo "$workers"
+    echo -ne "${C}Masukkan nama worker yang akan digunakan:${NC} "
+    read WORKER_NAME
+
+    while read -r BUG; do
+        [ -z "$BUG" ] && continue
+        DATA=$(cat <<EOF
+{
+    "hostname": "$BUG",
+    "service": "$WORKER_NAME",
+    "environment": "production"
+}
+EOF
+        )
+
+        RESP=$(curl -s -w "%{http_code}" -o response.json \
+            -X PUT "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/domains/records" \
+            -H "X-Auth-Email: $EMAILCF" \
+            -H "X-Auth-Key: $KEY" \
+            -H "Content-Type: application/json" \
+            -d "$DATA")
+        CODE=$(tail -n1 <<<"$RESP")
+        if [ "$CODE" -eq 200 ]; then
+            echo -e "${G}Berhasil menambahkan: $BUG${NC}"
+        else
+            echo -e "${R}Gagal menambahkan $BUG (Kode $CODE)${NC}"
+        fi
+    done <bug.txt
+    rm -f response.json
+}
+
+list_mapping() {
+    get_account_id || return
+    curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/domains/records" \
+        -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY" | jq -r '.result[] | "\(.hostname) => \(.service)"'
+}
+
+hapus_mapping() {
+    get_account_id || return
+    echo -e "${C}Mengambil daftar mapping...${NC}"
+    maps=$(curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/domains/records" \
+        -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY" | jq -r '.result[] | "\(.hostname):\(.service)"')
+
+    if [ -z "$maps" ]; then
+        echo -e "${Y}Tidak ada mapping ditemukan.${NC}"
+        return
     fi
+
+    i=1
+    declare -a hostnames
+    declare -a services
+    echo -e "${U}Daftar Mapping Aktif:${NC}"
+    while read -r line; do
+        hostname=$(echo "$line" | cut -d: -f1)
+        service=$(echo "$line" | cut -d: -f2)
+        hostnames[i]="$hostname"
+        services[i]="$service"
+        echo "$i) $hostname => $service"
+        ((i++))
+    done <<<"$maps"
+    echo "a) Hapus semua"
+    echo "x) Batal"
+    echo -ne "${C}Pilih: ${NC}"
+    read opt
+
+    if [[ "$opt" == "x" ]]; then return; fi
+    if [[ "$opt" == "a" ]]; then
+        for idx in "${!hostnames[@]}"; do
+            curl -s -X DELETE "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/domains/records/${hostnames[idx]}" \
+                -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY"
+            echo -e "${G}Hapus ${hostnames[idx]}${NC}"
+        done
+        return
+    fi
+
+    hostname=${hostnames[$opt]}
+    if [ -n "$hostname" ]; then
+        curl -s -X DELETE "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/domains/records/$hostname" \
+            -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY"
+        echo -e "${G}Hapus $hostname${NC}"
+    fi
+}
+
+# ────────────────📜 MENU ────────────────
+while true; do
+    clear_screen
+    check_login_status
+    echo -e "${C}╔══════════════════════════════════════════╗${NC}"
+    echo -e "${C}║   🌩️ CLOUDFLARE WORKER MANAGER CLI   ║${NC}"
+    echo -e "${C}╚══════════════════════════════════════════╝${NC}"
+    echo -e "Status Login : $LOGIN_STATUS\n"
+
+    echo -e "${W}1.${NC} Tambah Akun Cloudflare"
+    echo -e "${W}2.${NC} Hapus Akun Cloudflare"
+    echo -e "${W}3.${NC} Tambah Bug (bug.txt)"
+    echo -e "${W}4.${NC} Buat Worker JS"
+    echo -e "${W}5.${NC} Tambah Hostname Mapping dari bug.txt"
+    echo -e "${W}6.${NC} Lihat List Hostname Mapping Aktif"
+    echo -e "${W}7.${NC} Hapus Hostname Mapping"
+    echo -e "${W}8.${NC} Lihat List Worker JS Aktif"
+    echo -e "${W}9.${NC} Hapus Worker JS"
+    echo -e "${W}0.${NC} Keluar"
+    echo
+    echo -ne "${Y}Pilih menu: ${NC}"
+    read menu
+
+    case $menu in
+    1) add_account ;;
+    2) delete_account ;;
+    3) add_bug ;;
+    4) buat_worker ;;
+    5) add_domain_worker ;;
+    6) list_mapping ;;
+    7) hapus_mapping ;;
+    8) get_account_id && curl -s -X GET "https://api.cloudflare.com/client/v4/accounts/$AKUNID/workers/scripts" -H "X-Auth-Email: $EMAILCF" -H "X-Auth-Key: $KEY" | jq -r '.result[].id' ;;
+    9) hapus_worker ;;
+    0) exit 0 ;;
+    *) echo -e "${R}Pilihan tidak valid!${NC}" ;;
+    esac
+
     pause
-}
-
-# ---------- Main Menu ----------
-main_menu() {
-    while true; do
-        clear
-        echo -e "${c}CLOUDFLARE WORKER MANAGER - FINAL${NC}"
-        echo "1) Add akun Cloudflare"
-        echo "2) Hapus akun Cloudflare"
-        echo "3) Add bug (edit bug.txt)"
-        echo "4) Add Worker JS"
-        echo "5) Add Hostname berdasarkan bug.txt"
-        echo "6) Cek List Hostname Mapping Aktif"
-        echo "7) Hapus Hostname Mapping"
-        echo "8) Cek List Worker JS beserta Hostnamenya"
-        echo "9) Hapus Worker JS"
-        echo "x) Keluar"
-        read -p "Pilih menu: " opt
-        case "$opt" in
-            1) add_akun_cf ;;
-            2) del_akun_cf ;;
-            3) add_bug ;;
-            4) buat_worker ;;
-            5) add_domain_worker ;;
-            6) cek_mapping ;;
-            7) hapus_mapping ;;
-            8) cek_worker_host ;;
-            9) hapus_worker_menu ;;
-            x|X) exit 0 ;;
-            *) echo -e "${r}Pilihan tidak valid.${NC}"; pause ;;
-        esac
-    done
-}
-
-# Start
-main_menu
+done
