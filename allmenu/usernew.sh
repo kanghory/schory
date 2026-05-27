@@ -7,38 +7,61 @@ NC='\033[0m'
 YELLOW='\033[1;93m'
 RED='\033[1;91m'
 
-# Header
-clear
-echo -e "${YELLOW}---------------------------------------------------${NC}"
-echo -e "                SSH Ovpn Account kanghory VPN"
-echo -e "${YELLOW}---------------------------------------------------${NC}"
+# ==================================================
+# AUTO INPUT PARAMETER
+# Format:
+# addssh username password iplimit expired
+# ==================================================
 
-# Input data
-read -p " Username        : " Login
-read -p " Password        : " Pass
-read -p " Limit IP        : " iplimit
-read -p " Expired (Days)  : " masaaktif
+if [[ $# -eq 4 ]]; then
+    Login="$1"
+    Pass="$2"
+    iplimit="$3"
+    masaaktif="$4"
+else
+    clear
+    echo -e "${YELLOW}---------------------------------------------------${NC}"
+    echo -e "                SSH Ovpn Account kanghory VPN"
+    echo -e "${YELLOW}---------------------------------------------------${NC}"
 
-# Validasi input
+    read -p " Username        : " Login
+    read -p " Password        : " Pass
+    read -p " Limit IP        : " iplimit
+    read -p " Expired (Days)  : " masaaktif
+fi
+
+# ==================================================
+# VALIDASI INPUT
+# ==================================================
+
 if [[ -z "$Login" || -z "$Pass" || -z "$iplimit" || -z "$masaaktif" ]]; then
     echo -e "${RED}[ERROR]${NC} Semua input harus diisi!"
     exit 1
 elif ! [[ "$iplimit" =~ ^[0-9]+$ && "$masaaktif" =~ ^[0-9]+$ ]]; then
-    echo -e "${RED}[ERROR]${NC} Limit IP, dan Expired harus berupa angka!"
+    echo -e "${RED}[ERROR]${NC} Limit IP dan Expired harus berupa angka!"
     exit 1
 fi
 
-# Cek jika user sudah ada
+# ==================================================
+# CEK USER
+# ==================================================
+
 if id "$Login" &>/dev/null; then
     echo -e "${RED}[ERROR]${NC} Username '$Login' sudah ada!"
     exit 1
 fi
 
-# Simpan Limit IP
+# ==================================================
+# SIMPAN LIMIT IP
+# ==================================================
+
 mkdir -p /etc/klmpk/limit/ssh/ip/
 echo "$iplimit" > /etc/klmpk/limit/ssh/ip/$Login
 
-# Load data sistem
+# ==================================================
+# LOAD DATA SERVER
+# ==================================================
+
 domain=$(cat /etc/xray/domain)
 sldomain=$(cat /root/nsdomain)
 cdndomain=$(cat /root/awscdndomain 2>/dev/null || echo "auto pointing Cloudflare")
@@ -74,28 +97,40 @@ color_port() {
     [[ "$port" == "Tidak terdeteksi" ]] && echo -e "${RED}$port${NC}" || echo -e "$port"
 }
 
-# Tambah user
-useradd -e `date -d "$masaaktif days" +"%Y-%m-%d"` -s /bin/false -M $Login
+# ==================================================
+# CREATE USER
+# ==================================================
+
+useradd -e $(date -d "$masaaktif days" +"%Y-%m-%d") -s /bin/false -M $Login
+
 echo -e "$Pass\n$Pass\n" | passwd $Login &> /dev/null
+
 hariini=$(date +%Y-%m-%d)
 expi=$(date -d "$masaaktif days" +"%Y-%m-%d")
 
-# Output
+# ==================================================
+# OUTPUT
+# ==================================================
+
 clear
+
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "\E[44;1;39m            ⇱ INFORMASI AKUN SSH ⇲             \E[0m"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+
 echo -e "${LIGHT}Username       : $Login"
 echo -e "Password       : $Pass"
 echo -e "Created        : $hariini"
 echo -e "Expired        : $expi"
 echo -e "Limit IP       : $iplimit"
+
 echo -e "${LIGHT}=================HOST-SSH======================"
 echo -e "IP/Host        : $IP"
 echo -e "Domain SSH     : $domain"
 echo -e "Cloudflare     : $cdndomain"
 echo -e "PubKey         : $slkey"
 echo -e "Nameserver     : $sldomain"
+
 echo -e "${LIGHT}===============SERVICE PORT===================="
 echo -e "OpenSSH        : $(color_port "$openssh")"
 echo -e "Dropbear       : $(color_port "$dropbear")"
@@ -106,27 +141,38 @@ echo -e "WS TLS         : $(color_port "$ws_tls")"
 echo -e "WS HTTP        : $(color_port "$ws_http")"
 echo -e "WS Direct      : $(color_port "$ws_direct")"
 echo -e "BadVPN UDPGW   : $(color_port "$udpgw_ports")"
+
 echo -e "OpenVPN TCP    : http://$IP:81/tcp.ovpn"
 echo -e "OpenVPN UDP    : http://$IP:81/udp.ovpn"
 echo -e "OpenVPN SSL    : http://$IP:81/ssl.ovpn"
+
 echo -e "${LIGHT}=============Payload HTTP Custom=============="
+
 echo -e "Payload WS TLS (Cloudflare) :"
 echo -e "GET / HTTP/1.1[crlf]Host: $domain[crlf]Upgrade: websocket[crlf][crlf]"
+
 echo -e ""
 echo -e "Payload WS HTTP (Direct)    :"
 echo -e "GET / HTTP/1.1[crlf]Host: $domain[crlf]Connection: Keep-Alive[crlf]Upgrade: websocket[crlf][crlf]"
+
 echo -e ""
 echo -e "Payload SNI TLS (SSL/TLS)   :"
 echo -e "GET wss://$domain/ HTTP/1.1[crlf]Host: $domain[crlf]Upgrade: websocket[crlf][crlf]"
+
 echo -e ""
 echo -e "Payload CDN (Fake Host)     :"
 echo -e "GET / HTTP/1.1[crlf]Host: www.bing.com[crlf]Connection: Keep-Alive[crlf]Upgrade: websocket[crlf][crlf]"
+
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "       Script by kanghoryVPN"
 echo -e "${LIGHT}================================================${NC}"
 
-# Simpan log akun
+# ==================================================
+# SIMPAN LOG
+# ==================================================
+
 mkdir -p /etc/klmpk/log-ssh
+
 cat <<EOF > /etc/klmpk/log-ssh/$Login.txt
 ==== SSH Account ====
 Username : $Login
@@ -156,20 +202,13 @@ BadVPN UDPGW : $udpgw_ports
 TCP : http://$IP:81/tcp.ovpn
 UDP : http://$IP:81/udp.ovpn
 SSL : http://$IP:81/ssl.ovpn
-
-==== Payload HTTP Custom ====
-Payload WS TLS (Cloudflare) :
-GET / HTTP/1.1[crlf]Host: $domain[crlf]Upgrade: websocket[crlf][crlf]
-
-Payload WS HTTP (Direct) :
-GET / HTTP/1.1[crlf]Host: $domain[crlf]Connection: Keep-Alive[crlf]Upgrade: websocket[crlf][crlf]
-
-Payload SNI TLS (SSL/TLS) :
-GET wss://$domain/ HTTP/1.1[crlf]Host: $domain[crlf]Upgrade: websocket[crlf][crlf]
-
-Payload CDN (Fake Host) :
-GET / HTTP/1.1[crlf]Host: www.bing.com[crlf]Connection: Keep-Alive[crlf]Upgrade: websocket[crlf][crlf]
 EOF
 
-read -n 1 -s -r -p "Tekan ENTER untuk kembali ke menu..."
-/usr/bin/menu
+# ==================================================
+# AUTO RETURN MENU JIKA MANUAL
+# ==================================================
+
+if [[ $# -eq 0 ]]; then
+    read -n 1 -s -r -p "Tekan ENTER untuk kembali ke menu..."
+    /usr/bin/menu
+fi
