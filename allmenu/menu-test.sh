@@ -99,7 +99,14 @@ IP=$(wget -qO- ipinfo.io/ip 2>/dev/null || echo "127.0.0.1")
 
 detect_ports() {
     local pattern="$1"
-    local ports=$(ss -tulpn 2>/dev/null | grep -i "$pattern" | awk '{print $4}' | grep -oE '[0-9]+$' | sort -n | uniq | paste -sd, -)
+    local ports=""
+    
+    if command -v netstat &>/dev/null; then
+        ports=$(netstat -tulpn 2>/dev/null | grep -i "$pattern" | awk '{print $4}' | grep -oE '[0-9]+$' | sort -n | uniq | paste -sd, -)
+    else
+        ports=$(ss -tulpn 2>/dev/null | grep -i "$pattern" | awk '{print $4}' | grep -oE ':[0-9]+$' | tr -d ':' | sort -n | uniq | paste -sd, -)
+    fi
+
     [[ -z "$ports" ]] && echo "Tidak terdeteksi" || echo "$ports"
 }
 
@@ -112,7 +119,8 @@ ws_http=$(detect_ports 80)
 slowdns=$(ps -ef | grep -w sldns | grep -v grep | awk '{for(i=1;i<=NF;i++){if($i=="-udp"){print $(i+1)}}}' | cut -d: -f2 | paste -sd, -)
 [[ -z "$slowdns" ]] && slowdns="Tidak terdeteksi"
 
-ssh_udp=$(ss -ulnpt | grep udp-custom | awk '{print $5}' | cut -d: -f2 | sort -n | uniq | paste -sd, -)
+ssh_udp=$(ss -ulnpt 2>/dev/null | grep udp-custom | awk '{print $5}' | cut -d: -f2 | sort -n | uniq | paste -sd, -)
+[[ -z "$ssh_udp" ]] && ssh_udp=$(lsof -nP -iUDP 2>/dev/null | grep udp-custom | awk '{print $9}' | cut -d: -f2 | sort -n | uniq | paste -sd, -)
 [[ -z "$ssh_udp" ]] && ssh_udp="Tidak terdeteksi"
 
 udpgw_ports=$(ps -ef | grep badvpn | grep -v grep | awk '{for(i=1;i<=NF;i++){if($i=="--listen-addr"){print $(i+1)}}}' | cut -d: -f2 | paste -sd, -)
