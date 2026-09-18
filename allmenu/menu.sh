@@ -198,6 +198,7 @@ echo -e "\E[39;1;92m                     ⇱ MENU BOT dan WEB SERVER ⇲        
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m${NC}"
 echo -e " ${BICyan}[${BIWhite}25${BICyan}]${RED} •${NC} ${YELLOW}SET ${GREEN}BOT TELEGRAM $NC  ${BICyan}[${BIWhite}26${BICyan}]${RED} • ${NC}${YELLOW}WEB SERVER $NC"
 echo -e " ${BICyan}[${BIWhite}27${BICyan}]${RED} •${NC} ${YELLOW}SET DOMAIN WILDCARD $NC"
+echo -e " ${BICyan}[${BIWhite}28${BICyan}]${RED} •${NC} ${YELLOW}BUAT TEST KALO PINGIN TAMBAH FITUR $NC"
 echo -e " ${BICyan}[${BIWhite} X ${BICyan}] TYPE X FOR EXIT ${BICyan}${BIYellow}${BICyan}${NC}"  
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m${NC}"
 
@@ -241,6 +242,7 @@ case $opt in
 25) clear ; menu_bot_tele ;;
 26) clear ; instal-webserver ;;
 27) clear ; menu-wildcard ;;
+28) clear ; menu-test ;;    # <-- Memanggil menu hub khusus testing
 
 0) clear ; menu ;;
 x) exit ;;
