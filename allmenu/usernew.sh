@@ -25,7 +25,7 @@ else
     echo -e "                SSH Ovpn Account Generator"
     echo -e "${YELLOW}---------------------------------------------------${NC}"
     echo -e " [1] Buat Single User"
-    echo -e " [2] Buat Multi User (Contoh: user1-5)"
+    echo -e " [2] Buat Multi User (Contoh: user1-5 atau zz1200-1205)"
     echo -e "${YELLOW}---------------------------------------------------${NC}"
     read -p " Pilih Mode [1/2] : " mode
 
@@ -48,7 +48,7 @@ else
 fi
 
 # ==================================================
-# PARSING SINGLE / MULTI USER
+# PARSING SINGLE / MULTI USER (FIX REGEX BUG)
 # ==================================================
 
 user_list=()
@@ -56,21 +56,31 @@ user_list=()
 if [[ "$mode" == "1" ]]; then
     user_list+=("$Login")
 elif [[ "$mode" == "2" ]]; then
-    if [[ "$range_input" =~ ^([a-zA-Z0-9_-]+)([0-9]+)-([0-9]+)$ ]]; then
+    # Fix Regex: Memisahkan prefix teks dan dua pasang angka rentang secara akurat
+    # Contoh: zz1200-1205 -> prefix: "zz", start: "1200", end: "1205"
+    if [[ "$range_input" =~ ^([a-zA-Z_-]*[a-zA-Z_-])?([0-9]+)-([0-9]+)$ ]]; then
         prefix="${BASH_REMATCH[1]}"
-        start="${BASH_REMATCH[2]}"
-        end="${BASH_REMATCH[3]}"
+        start_str="${BASH_REMATCH[2]}"
+        end_str="${BASH_REMATCH[3]}"
+
+        # Konversi ke integer basis 10
+        start=$((10#$start_str))
+        end=$((10#$end_str))
 
         if (( start > end )); then
-            echo -e "${RED}[ERROR]${NC} Angka awal tidak boleh lebih besar dari angka akhir!"
+            echo -e "${RED}[ERROR]${NC} Angka awal ($start) tidak boleh lebih besar dari angka akhir ($end)!"
             exit 1
         fi
 
+        # Jaga panjang digit agar angka berkepala nol (misal 01-05) tidak hilang
+        num_len=${#start_str}
+
         for (( i=start; i<=end; i++ )); do
-            user_list+=("${prefix}${i}")
+            formatted_num=$(printf "%0${num_len}d" "$i")
+            user_list+=("${prefix}${formatted_num}")
         done
     else
-        echo -e "${RED}[ERROR]${NC} Format multi-user salah! Gunakan format seperti: user1-5"
+        echo -e "${RED}[ERROR]${NC} Format multi-user salah! Gunakan format seperti: user1-5 atau zz1200-1205"
         exit 1
     fi
 fi
