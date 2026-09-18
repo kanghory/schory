@@ -53,6 +53,7 @@ wget -O /usr/bin/menu_bot_tele "https://raw.githubusercontent.com/kanghory/schor
 wget -O /usr/bin/instal-webserver "https://raw.githubusercontent.com/kanghory/schory/main/webserver/instal-webserver.sh"
 wget -O /usr/bin/cek-user-online-trojan "https://raw.githubusercontent.com/kanghory/schory/main/allmenu/cek-user-online-trojan.sh"
 wget -O /usr/bin/menu-wildcard "https://raw.githubusercontent.com/kanghory/schory/main/allmenu/menu-wildcard.sh"
+wget -O /usr/bin/menu-test "https://raw.githubusercontent.com/kanghory/schory/main/allmenu/menu-test.sh"
 #wget -q -O /usr/bin/ns-menu "https://raw.githubusercontent.com/kanghory/VPN/main/autoscript-ssh-slowdns-main/slowdns.sh && chmod +x slowdns.sh && ./slowdns.sh"
 wget https://raw.githubusercontent.com/kanghory/schory/main/backup/set-br.sh
 bash set-br.sh
@@ -102,7 +103,7 @@ chmod +x /usr/bin/menu_bot_tele
 chmod +x /usr/bin/instal-webserver
 chmod +x /usr/bin/cek-user-online-trojan
 chmod +x /usr/bin/menu-wildcard
-
+chmod +x /usr/bin/menu-test
 
 
 
