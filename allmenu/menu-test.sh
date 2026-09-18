@@ -6,6 +6,7 @@ LIGHT='\033[1;97m'
 NC='\033[0m'
 YELLOW='\033[1;93m'
 RED='\033[1;91m'
+GREEN='\033[1;92m'
 
 clear
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -64,6 +65,9 @@ esac
 if [[ ${#users_to_del[@]} -eq 0 ]]; then
     echo -e "\n${RED}Failure: Username cannot be empty.${NC}"
 else
+    success_count=0
+    fail_count=0
+
     echo -e "\n${CYAN}──────────────────────────────────────────${NC}"
     for user in "${users_to_del[@]}"; do
         if getent passwd "$user" > /dev/null 2>&1; then
@@ -76,11 +80,17 @@ else
             log_file="/etc/klmpk/log-ssh/$user.txt"
             [[ -f "$log_file" ]] && rm -f "$log_file"
 
-            echo -e "User \033[1;33m$user\033[0m was successfully removed."
+            echo -e "User \033[1;33m$user\033[0m berhasil dihapus beserta Limit IP & Log."
+            ((success_count++))
         else
             echo -e "Failure: User \033[1;31m$user\033[0m does not exist."
+            ((fail_count++))
         fi
     done
+    echo -e "${CYAN}──────────────────────────────────────────${NC}"
+    echo -e "${GREEN}TOTAL KETERANGAN PENGHAPUSAN:${NC}"
+    echo -e " Real User Berhasil Dihapus : ${YELLOW}$success_count${NC} user"
+    echo -e " User Gagal / Tidak Ada     : ${RED}$fail_count${NC} user"
     echo -e "${CYAN}──────────────────────────────────────────${NC}"
 fi
 
