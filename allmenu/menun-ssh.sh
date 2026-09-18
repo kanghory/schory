@@ -51,34 +51,120 @@ export IP=$( curl -s https://ipinfo.io/ip/ )
 export NETWORK_IFACE="$(ip route show to default | awk '{print $5}')"
 clear
 function del() {
+    # Warna
+    local CYAN='\033[1;96m'
+    local LIGHT='\033[1;97m'
+    local NC='\033[0m'
+    local YELLOW='\033[1;93m'
+    local RED='\033[1;91m'
+    local GREEN='\033[1;92m'
+
     clear
-    echo -e "\033[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "\E[0;41;36m               DELETE USER                \E[0m"
-    echo -e "\033[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
-    echo ""
-    read -p "Username SSH to Delete : " Pengguna
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e " [1] Hapus Single User"
+    echo -e " [2] Hapus Multi User (Range: user1-5 ATAU Koma: Gus,Hudi,joko)"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    read -p " Pilih Mode [1/2] : " mode_del
 
-    if [[ -z "$Pengguna" ]]; then
-        echo -e "\nFailure: Username cannot be empty."
-    elif getent passwd "$Pengguna" > /dev/null 2>&1; then
-        pkill -KILL -u "$Pengguna" 2>/dev/null
-        userdel "$Pengguna" > /dev/null 2>&1
+    local users_to_del=()
 
-        # Hapus file limit IP jika ada
-        limit_file="/etc/klmpk/limit/ssh/ip/$Pengguna"
-        if [[ -f "$limit_file" ]]; then
-            rm -f "$limit_file"
-            echo -e "Limit IP for user \033[1;33m$Pengguna\033[0m removed."
-        fi
+    case $mode_del in
+        1)
+            read -p " Username SSH to Delete : " Pengguna
+            [[ -n "$Pengguna" ]] && users_to_del+=("$Pengguna")
+            ;;
+        2)
+            read -p " Format Multi Delete : " multi_input
+            
+            # FIX REGEX: Range format (contoh: user1-5 atau zxl1241-1245)
+            if [[ "$multi_input" =~ ^([a-zA-Z_-]*[a-zA-Z_-])?([0-9]+)-([0-9]+)$ ]]; then
+                prefix="${BASH_REMATCH[1]}"
+                start_str="${BASH_REMATCH[2]}"
+                end_str="${BASH_REMATCH[3]}"
 
-        echo -e "User \033[1;33m$Pengguna\033[0m was removed."
+                # Konversi ke integer basis 10
+                start=$((10#$start_str))
+                end=$((10#$end_str))
+
+                if (( start > end )); then
+                    echo -e "\n${RED}[ERROR]${NC} Angka awal ($start) tidak boleh lebih besar dari angka akhir ($end)!"
+                    read -n 1 -s -r -p "Tekan ENTER untuk kembali..."
+                    [[ -f /usr/bin/menu ]] && /usr/bin/menu || return
+                fi
+
+                # Jaga panjang digit (jika ada angka berkepala nol misal 01-05)
+                num_len=${#start_str}
+
+                for (( i=start; i<=end; i++ )); do
+                    formatted_num=$(printf "%0${num_len}d" "$i")
+                    users_to_del+=("${prefix}${formatted_num}")
+                done
+
+            # Comma format (contoh: Gus,Hudi,joko)
+            elif [[ "$multi_input" == *","* ]]; then
+                IFS=',' read -ra ADDR <<< "$multi_input"
+                for item in "${ADDR[@]}"; do
+                    clean_user=$(echo "$item" | xargs)
+                    [[ -n "$clean_user" ]] && users_to_del+=("$clean_user")
+                done
+            else
+                # Single input fallback
+                clean_user=$(echo "$multi_input" | xargs)
+                [[ -n "$clean_user" ]] && users_to_del+=("$clean_user")
+            fi
+            ;;
+        *)
+            echo -e "\n${RED}[ERROR]${NC} Pilihan tidak valid."
+            read -n 1 -s -r -p "Tekan ENTER untuk kembali..."
+            [[ -f /usr/bin/menu ]] && /usr/bin/menu || return
+            ;;
+    esac
+
+    if [[ ${#users_to_del[@]} -eq 0 ]]; then
+        echo -e "\n${RED}Failure: Username cannot be empty.${NC}"
     else
-        echo -e "Failure: User \033[1;31m$Pengguna\033[0m does not exist."
+        local success_count=0
+        local fail_count=0
+
+        echo -e "\n${CYAN}──────────────────────────────────────────${NC}"
+        for user in "${users_to_del[@]}"; do
+            if getent passwd "$user" > /dev/null 2>&1; then
+                pkill -KILL -u "$user" 2>/dev/null
+                userdel "$user" > /dev/null 2>&1
+
+                limit_file="/etc/klmpk/limit/ssh/ip/$user"
+                [[ -f "$limit_file" ]] && rm -f "$limit_file"
+
+                log_file="/etc/klmpk/log-ssh/$user.txt"
+                [[ -f "$log_file" ]] && rm -f "$log_file"
+
+                echo -e "User \033[1;33m$user\033[0m berhasil dihapus beserta Limit IP & Log."
+                ((success_count++))
+            else
+                echo -e "Failure: User \033[1;31m$user\033[0m does not exist."
+                ((fail_count++))
+            fi
+        done
+        echo -e "${CYAN}──────────────────────────────────────────${NC}"
+        echo -e "${GREEN}TOTAL KETERANGAN PENGHAPUSAN:${NC}"
+        echo -e " Real User Berhasil Dihapus : ${YELLOW}$success_count${NC} user"
+        echo -e " User Gagal / Tidak Ada     : ${RED}$fail_count${NC} user"
+        echo -e "${CYAN}──────────────────────────────────────────${NC}"
     fi
 
     echo ""
-    read -n 1 -s -r -p "Press any key to return to menu"
-    menu
+    read -n 1 -s -r -p "Tekan ENTER untuk kembali ke menu..."
+    
+    # Kembali ke menu utama, jika tidak ada cukup keluar dari function
+    if declare -f menu > /dev/null; then
+        menu
+    elif [[ -f /usr/bin/menu ]]; then
+        /usr/bin/menu
+    else
+        return
+    fi
 }
 function autodel(){
 clear
