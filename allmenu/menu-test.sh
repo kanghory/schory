@@ -27,20 +27,28 @@ case $mode_del in
     2)
         read -p " Format Multi Delete : " multi_input
         
-        # Range format (contoh: user1-5)
-        if [[ "$multi_input" =~ ^([a-zA-Z0-9_-]+)([0-9]+)-([0-9]+)$ ]]; then
+        # FIX REGEX: Range format (contoh: user1-5 atau zxl1241-1245)
+        if [[ "$multi_input" =~ ^([a-zA-Z_-]*[a-zA-Z_-])?([0-9]+)-([0-9]+)$ ]]; then
             prefix="${BASH_REMATCH[1]}"
-            start="${BASH_REMATCH[2]}"
-            end="${BASH_REMATCH[3]}"
+            start_str="${BASH_REMATCH[2]}"
+            end_str="${BASH_REMATCH[3]}"
+
+            # Konversi ke integer basis 10
+            start=$((10#$start_str))
+            end=$((10#$end_str))
 
             if (( start > end )); then
-                echo -e "\n${RED}[ERROR]${NC} Angka awal tidak boleh lebih besar dari angka akhir!"
+                echo -e "\n${RED}[ERROR]${NC} Angka awal ($start) tidak boleh lebih besar dari angka akhir ($end)!"
                 read -n 1 -s -r -p "Tekan ENTER untuk kembali..."
                 [[ -f /usr/bin/menu ]] && /usr/bin/menu || exit 0
             fi
 
+            # Jaga panjang digit (jika ada angka berkepala nol misal 01-05)
+            num_len=${#start_str}
+
             for (( i=start; i<=end; i++ )); do
-                users_to_del+=("${prefix}${i}")
+                formatted_num=$(printf "%0${num_len}d" "$i")
+                users_to_del+=("${prefix}${formatted_num}")
             done
 
         # Comma format (contoh: Gus,Hudi,joko)
@@ -51,6 +59,7 @@ case $mode_del in
                 [[ -n "$clean_user" ]] && users_to_del+=("$clean_user")
             done
         else
+            # Single input fallback
             clean_user=$(echo "$multi_input" | xargs)
             [[ -n "$clean_user" ]] && users_to_del+=("$clean_user")
         fi
