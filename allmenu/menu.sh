@@ -67,7 +67,7 @@ export Script_Mode="Stable"
 export Auther=".geovpn"
 
 # ==========================================
-# // VALIDASI LISENSI YANG LEBIH AMAN & AMANTI-HANG
+# // VALIDASI LISENSI YANG DIPERBAIKI (FIXED)
 # ==========================================
 MYIP=$(curl -s --max-time 5 https://ipinfo.io/ip/ || curl -s --max-time 5 https://ipv4.icanhazip.com)
 
@@ -83,8 +83,9 @@ if [ -z "$DATA_IZIN" ]; then
     Name="Offline Mode"
     Exp="Unchecked"
 else
-    Name=$(echo "$DATA_IZIN" \vert{} grep "$MYIP" | awk '{print $2}')
-    Exp=$(echo "$DATA_IZIN" \vert{} grep "$MYIP" | awk '{print $3}')
+    # Mengambil hanya baris yang sesuai dengan IP VPS, dibatasi baris pertama saja agar tidak berantakan
+    Name=$(echo "$DATA_IZIN" | grep -w "$MYIP" | head -n 1 | awk '{print $2}')
+    Exp=$(echo "$DATA_IZIN" | grep -w "$MYIP" | head -n 1 | awk '{print $3}')
     
     if [ -z "$Name" ]; then
         clear
@@ -97,6 +98,7 @@ else
         exit 1
     fi
 fi
+# ==========================================
 # ==========================================
 
 # // Root Checking
