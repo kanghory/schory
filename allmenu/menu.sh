@@ -67,7 +67,7 @@ export Script_Mode="Stable"
 export Auther=".geovpn"
 
 # ==========================================
-# // VALIDASI LISENSI YANG DIPERBAIKI (FIXED)
+# // VALIDASI LISENSI FINAL FIX
 # ==========================================
 MYIP=$(curl -s --max-time 5 https://ipinfo.io/ip/ || curl -s --max-time 5 https://ipv4.icanhazip.com)
 
@@ -83,11 +83,10 @@ if [ -z "$DATA_IZIN" ]; then
     Name="Offline Mode"
     Exp="Unchecked"
 else
-    # Mengambil hanya baris yang sesuai dengan IP VPS, dibatasi baris pertama saja agar tidak berantakan
-    Name=$(echo "$DATA_IZIN" | grep -w "$MYIP" | head -n 1 | awk '{print $2}')
-    Exp=$(echo "$DATA_IZIN" | grep -w "$MYIP" | head -n 1 | awk '{print $3}')
+    # Mencari baris yang mengandung IP VPS, lalu ambil kolom ke-2 untuk Nama dan kolom ke-3 untuk Exp (hanya 1 baris pertama)
+    Cek_Izin=$(echo "$DATA_IZIN" | grep "$MYIP" | head -n 1)
     
-    if [ -z "$Name" ]; then
+    if [ -z "$Cek_Izin" ]; then
         clear
         echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo -e "${RED}                 ⚠️  IZIN AKSES DITOLAK! ⚠️                   ${NC}"
@@ -96,8 +95,12 @@ else
         echo -e " Silakan hubungi admin/developer untuk pendaftaran izin."
         echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         exit 1
+    else
+        Name=$(echo "$Cek_Izin" | awk '{print $2}')
+        Exp=$(echo "$Cek_Izin" | awk '{print $3}')
     fi
 fi
+# ==========================================
 # ==========================================
 # ==========================================
 
