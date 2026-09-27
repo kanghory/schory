@@ -43,15 +43,15 @@ export BLUE='\033[0;34m'
 export PURPLE='\033[0;35m'
 export CYAN='\033[0;36m'
 export LIGHT='\033[0;37m'
-export NC='\033[0m'
+export NC='\e[0m'
 
 # // Export Banner Status Information
-export EROR="[${RED} EROR ${NC}]"
-export INFO="[${YELLOW} INFO ${NC}]"
-export OKEY="[${GREEN} OKEY ${NC}]"
-export PENDING="[${YELLOW} PENDING ${NC}]"
-export SEND="[${YELLOW} SEND ${NC}]"
-export RECEIVE="[${YELLOW} RECEIVE ${NC}]"
+export EROR="[${RED} EROR${NC}]"
+export INFO="[${YELLOW} INFO${NC}]"
+export OKEY="[${GREEN} OKEY${NC}]"
+export PENDING="[${YELLOW} PENDING${NC}]"
+export SEND="[${YELLOW} SEND${NC}]"
+export RECEIVE="[${YELLOW} RECEIVE${NC}]"
 
 # // Export Align
 export BOLD="\e[1m"
@@ -65,9 +65,39 @@ export Server_Port="443"
 export Server_IP="underfined"
 export Script_Mode="Stable"
 export Auther=".geovpn"
-export MYIP=$( curl -s https://ipinfo.io/ip/ )
-Name=$(curl -sS https://raw.githubusercontent.com/kanghory/schory/main/izin | grep $MYIP | awk '{print $2}')
-Exp=$(curl -sS https://raw.githubusercontent.com/kanghory/schory/main/izin | grep $MYIP | awk '{print $3}')
+
+# ==========================================
+# // VALIDASI LISENSI YANG LEBIH AMAN & AMANTI-HANG
+# ==========================================
+MYIP=$(curl -s --max-time 5 https://ipinfo.io/ip/ || curl -s --max-time 5 https://ipv4.icanhazip.com)
+
+if [ -z "$MYIP" ]; then
+    echo -e "${EROR} Gagal mendeteksi IP VPS. Periksa koneksi internet Anda!"
+    exit 1
+fi
+
+IZIN_URL="https://raw.githubusercontent.com/kanghory/schory/main/izin"
+DATA_IZIN=$(curl -s --max-time 5 "$IZIN_URL")
+
+if [ -z "$DATA_IZIN" ]; then
+    Name="Offline Mode"
+    Exp="Unchecked"
+else
+    Name=$(echo "$DATA_IZIN" \vert{} grep "$MYIP" | awk '{print $2}')
+    Exp=$(echo "$DATA_IZIN" \vert{} grep "$MYIP" | awk '{print $3}')
+    
+    if [ -z "$Name" ]; then
+        clear
+        echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${RED}                 ⚠️  IZIN AKSES DITOLAK! ⚠️                   ${NC}"
+        echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e " IP VPS Anda (${YELLOW}$MYIP${NC}) belum terdaftar pada sistem."
+        echo -e " Silakan hubungi admin/developer untuk pendaftaran izin."
+        echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        exit 1
+    fi
+fi
+# ==========================================
 
 # // Root Checking
 if [ "${EUID}" -ne 0 ]; then
@@ -95,13 +125,13 @@ stat=-f5
 else
 stat=-f7
 fi
-ngx=$(service nginx status | grep active | cut -d ' ' $stat)
+ngx=$(service nginx status \vert{} grep active \vert{} cut -d ' '$stat)
 if [ "$ngx" = "active" ]; then
 resngx="${green}ON${NC}"
 else
 resngx="${red}OFF${NC}"
 fi
-v2r=$(service xray status | grep active | cut -d ' ' $stat)
+v2r=$(service xray status \vert{} grep active \vert{} cut -d ' '$stat)
 if [ "$v2r" = "active" ]; then
 resv2r="${green}ON${NC}"
 else
@@ -138,12 +168,12 @@ echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "\E[39;1;92m                   ⇱ SCRIPT PREMIUM BY KANGHORY TUNNELING⇲             \E[0m"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m${NC}"
 echo -e "${BICyan} "                                                                      
-echo -e "${BICyan} ⇲  ${BICyan}Use Core        :  ${BIYellow}Xray-core"    
-echo -e "${BICyan} ⇲  ${BICyan}Current Domain  :  ${BIYellow}$(cat /etc/xray/domain)${NC}" 
-echo -e "${BICyan} ⇲  ${BICyan}NS Domain       :  $(cat /root/nsdomain)"
-echo -e "${BICyan} ⇲  ${BICyan}IP-VPS          :  ${BIYellow}$IPVPS${NC}"                  
-echo -e "${BICyan} ⇲  ${BICyan}ISP-VPS         :  ${BIYellow}$ISPVPS${NC}"
-echo -e "${BICyan} ⇲  ${BICyan}TOTAL RAM       :  ${BIYellow}${totalram}MB"
+echo -e "${BICyan} ⇲  ${BICyan}Use Core        :${BIYellow}Xray-core"    
+echo -e "${BICyan} ⇲  ${BICyan}Current Domain  :${BIYellow}$(cat /etc/xray/domain)${NC}" 
+echo -e "${BICyan} ⇲  ${BICyan}NS Domain       :$(cat /root/nsdomain)"
+echo -e "${BICyan} ⇲  ${BICyan}IP-VPS          :${BIYellow}$IPVPS${NC}"                  
+echo -e "${BICyan} ⇲  ${BICyan}ISP-VPS         :${BIYellow}$ISPVPS${NC}"
+echo -e "${BICyan} ⇲${BICyan}TOTAL RAM       :  ${BIYellow}${totalram}MB"
 
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m${NC}"
 echo -e "\E[39;1;92m STATUS HARI INI  :  ⇱ ILMU PADI ⇲             \E[0m"
@@ -153,60 +183,60 @@ echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "\E[39;1;92m                    ⇱ STATUS SERVICE ⇲                        \E[0m"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m${NC}"
 echo -e "${BICyan}┌──────────────────────────────────────────────────┐${NC}"
-echo -e "  ${GREEN}SSH      ${NC} : ${GREEN} ON ${NC}   "     
-echo -e "  ${GREEN}CRON     ${NC} : ${GREEN} ON ${NC}   "   
+echo -e "  ${GREEN}SSH${NC} : ${GREEN} ON${NC}   "     
+echo -e "  ${GREEN}CRON${NC} : ${GREEN} ON${NC}   "   
 echo -e "  ${GREEN}WEBSOCKET${NC} :  ${GREEN}ON${NC}    " 
-echo -e "  ${GREEN}DROPBEAR ${NC} :  ${GREEN}ON${NC}    " 
+echo -e "  ${GREEN}DROPBEAR${NC} :  ${GREEN}ON${NC}    " 
 echo -e "${BICyan}└──────────────────────────────────────────────────┘${NC}"
 
 echo -e "${GREEN}┌──────────────────────────────────────────────────┐${NC}"
-echo -e "${GREEN}│  \033[0m ${BOLD}${YELLOW}SSH     VMESS       VLESS      TROJAN       SHADOWSOCKS$NC  $COLOR1"
-echo -e "${GREEN}│  \033[0m ${Blue} $ssh1        $vma           $vla          $tra               $ssa   $NC"
+echo -e "${GREEN}│  \033[0m ${BOLD}${YELLOW}SSH     VMESS       VLESS      TROJAN       SHADOWSOCKS$NC$COLOR1"
+echo -e "${GREEN}│  \033[0m${Blue} $ssh1$vma           $vla$tra               $ssa$NC"
 echo -e "${GREEN}└──────────────────────────────────────────────────┘${NC}"
 
 echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "\E[39;1;92m                    ⇱ STATUS PENGUNAAN ⇲                        \E[0m"
 echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "     ${BICyan} NGINX ${NC}: ${GREEN}$resngx         ${LIGHT} Today  : $ttoday"
-echo -e "     ${BICyan} XRAY  ${NC}: ${GREEN}$resv2r         ${LIGHT} Monthly: $tmon"
+echo -e "     ${BICyan} NGINX${NC}: ${GREEN}$resngx         ${LIGHT} Today  :$ttoday"
+echo -e "     ${BICyan} XRAY${NC}: ${GREEN}$resv2r         ${LIGHT} Monthly:$tmon"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m${NC}"
 echo -e "\E[39;1;92m                     ⇱ MENU SERVICE ⇲                         \E[0m"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m${NC}"
 echo -e ""
-echo -e " ${BICyan}[${BIWhite}01${BICyan}]${RED} •${NC} ${YELLOW}SSH ${GREEN}MENU        $NC  ${BICyan}[${BIWhite}12${BICyan}]${RED} • ${NC}${YELLOW}GEN-SSL / CERTV $NC"
-echo -e " ${BICyan}[${BIWhite}02${BICyan}]${RED} •${NC} ${YELLOW}VMESS ${GREEN}MENU      $NC  ${BICyan}[${BIWhite}13${BICyan}]${RED} • ${NC}${YELLOW}BANNER CHAGE $NC"
-echo -e " ${BICyan}[${BIWhite}03${BICyan}]${RED} •${NC} ${YELLOW}VLESS ${GREEN}MENU      $NC  ${BICyan}[${BIWhite}14${BICyan}]${RED} • ${NC}${YELLOW}CEK RUNNING SERVICE $NC"
-echo -e " ${BICyan}[${BIWhite}04${BICyan}]${RED} •${NC} ${YELLOW}TROJAN ${GREEN}MENU     $NC  ${BICyan}[${BIWhite}15${BICyan}]${RED} • ${NC}${YELLOW}CEK TRAFIC $NC"
-echo -e " ${BICyan}[${BIWhite}05${BICyan}]${RED} •${NC} ${YELLOW}S-SOCK ${GREEN}MENU     $NC  ${BICyan}[${BIWhite}16${BICyan}]${RED} • ${NC}${YELLOW}SPEEDTEDT  $NC"
-echo -e " ${BICyan}[${BIWhite}06${BICyan}]${RED} •${NC} ${YELLOW}MENU ${GREEN}BACKUP     $NC  ${BICyan}[${BIWhite}17${BICyan}]${RED} • ${NC}${YELLOW}CEK BANDWIDTH USE $NC"
-echo -e " ${BICyan}[${BIWhite}07${BICyan}]${RED} •${NC} ${YELLOW}AUTO ${GREEN}REBOOT     $NC  ${BICyan}[${BIWhite}18${BICyan}]${RED} • ${NC}${YELLOW}LIMMIT SPEED $NC"
-echo -e " ${BICyan}[${BIWhite}08${BICyan}]${RED} •${NC} ${YELLOW}REBOOT          $NC  ${BICyan}[${BIWhite}19${BICyan}]${RED} • ${NC}${YELLOW}WEBMIN $NC"
-echo -e " ${BICyan}[${BIWhite}09${BICyan}]${RED} •${NC} ${YELLOW}RESTART ${GREEN}SERVICE $NC  ${BICyan}[${BIWhite}20${BICyan}]${RED} • ${NC}${YELLOW}SCRIPT INFO $NC"
-echo -e " ${BICyan}[${BIWhite}10${BICyan}]${RED} •${NC} ${YELLOW}TRIAL           $NC  ${BICyan}[${BIWhite}21${BICyan}]${RED} • ${NC}${YELLOW}CLEAR LOG $NC"
-echo -e " ${BICyan}[${BIWhite}11${BICyan}]${RED} •${NC} ${YELLOW}ADD ${GREEN}HOST        $NC  ${BICyan}[${BIWhite}22${BICyan}]${RED} • ${NC}${YELLOW}FIX MISSING POINTING $NC"
+echo -e " ${BICyan}[${BIWhite}01${BICyan}]${RED} •${NC} ${YELLOW}SSH${GREEN}MENU        $NC${BICyan}[${BIWhite}12${BICyan}]${RED} •${NC}${YELLOW}GEN-SSL / CERTV$NC"
+echo -e " ${BICyan}[${BIWhite}02${BICyan}]${RED} •${NC} ${YELLOW}VMESS${GREEN}MENU      $NC${BICyan}[${BIWhite}13${BICyan}]${RED} •${NC}${YELLOW}BANNER CHAGE$NC"
+echo -e " ${BICyan}[${BIWhite}03${BICyan}]${RED} •${NC} ${YELLOW}VLESS${GREEN}MENU      $NC${BICyan}[${BIWhite}14${BICyan}]${RED} •${NC}${YELLOW}CEK RUNNING SERVICE$NC"
+echo -e " ${BICyan}[${BIWhite}04${BICyan}]${RED} •${NC} ${YELLOW}TROJAN${GREEN}MENU     $NC${BICyan}[${BIWhite}15${BICyan}]${RED} •${NC}${YELLOW}CEK TRAFIC$NC"
+echo -e " ${BICyan}[${BIWhite}05${BICyan}]${RED} •${NC} ${YELLOW}S-SOCK${GREEN}MENU     $NC${BICyan}[${BIWhite}16${BICyan}]${RED} •${NC}${YELLOW}SPEEDTEDT$NC"
+echo -e " ${BICyan}[${BIWhite}06${BICyan}]${RED} •${NC} ${YELLOW}MENU${GREEN}BACKUP     $NC${BICyan}[${BIWhite}17${BICyan}]${RED} •${NC}${YELLOW}CEK BANDWIDTH USE$NC"
+echo -e " ${BICyan}[${BIWhite}07${BICyan}]${RED} •${NC} ${YELLOW}AUTO${GREEN}REBOOT     $NC${BICyan}[${BIWhite}18${BICyan}]${RED} •${NC}${YELLOW}LIMMIT SPEED$NC"
+echo -e " ${BICyan}[${BIWhite}08${BICyan}]${RED} •${NC}${YELLOW}REBOOT          $NC${BICyan}[${BIWhite}19${BICyan}]${RED} •${NC}${YELLOW}WEBMIN$NC"
+echo -e " ${BICyan}[${BIWhite}09${BICyan}]${RED} •${NC} ${YELLOW}RESTART${GREEN}SERVICE $NC${BICyan}[${BIWhite}20${BICyan}]${RED} •${NC}${YELLOW}SCRIPT INFO$NC"
+echo -e " ${BICyan}[${BIWhite}10${BICyan}]${RED} •${NC}${YELLOW}TRIAL           $NC${BICyan}[${BIWhite}21${BICyan}]${RED} •${NC}${YELLOW}CLEAR LOG$NC"
+echo -e " ${BICyan}[${BIWhite}11${BICyan}]${RED} •${NC} ${YELLOW}ADD${GREEN}HOST        $NC${BICyan}[${BIWhite}22${BICyan}]${RED} •${NC}${YELLOW}FIX MISSING POINTING$NC"
 
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m${NC}"
 echo -e "\E[39;1;92m                     ⇱ MENU SERVICE VPS ⇲                         \E[0m"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m${NC}"
-echo -e " ${BICyan}[${BIWhite}23${BICyan}]${RED} •${NC} ${YELLOW}GANTI ${GREEN}PASS VPS & HOSTNAME $NC  ${BICyan}[${BIWhite}24${BICyan}]${RED} • ${NC}${YELLOW}UPDATE SCRIPT $NC"
+echo -e " ${BICyan}[${BIWhite}23${BICyan}]${RED} •${NC} ${YELLOW}GANTI${GREEN}PASS VPS & HOSTNAME $NC${BICyan}[${BIWhite}24${BICyan}]${RED} •${NC}${YELLOW}UPDATE SCRIPT$NC"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m${NC}"
 
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m${NC}"
 echo -e "\E[39;1;92m                     ⇱ MENU BOT dan WEB SERVER ⇲                         \E[0m"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m${NC}"
-echo -e " ${BICyan}[${BIWhite}25${BICyan}]${RED} •${NC} ${YELLOW}SET ${GREEN}BOT TELEGRAM $NC  ${BICyan}[${BIWhite}26${BICyan}]${RED} • ${NC}${YELLOW}WEB SERVER $NC"
-echo -e " ${BICyan}[${BIWhite}27${BICyan}]${RED} •${NC} ${YELLOW}SET DOMAIN WILDCARD $NC"
-echo -e " ${BICyan}[${BIWhite}28${BICyan}]${RED} •${NC} ${YELLOW}BUAT TEST KALO PINGIN TAMBAH FITUR $NC"
-echo -e " ${BICyan}[${BIWhite} X ${BICyan}] TYPE X FOR EXIT ${BICyan}${BIYellow}${BICyan}${NC}"  
+echo -e " ${BICyan}[${BIWhite}25${BICyan}]${RED} •${NC} ${YELLOW}SET${GREEN}BOT TELEGRAM $NC${BICyan}[${BIWhite}26${BICyan}]${RED} •${NC}${YELLOW}WEB SERVER$NC"
+echo -e " ${BICyan}[${BIWhite}27${BICyan}]${RED} •${NC} ${YELLOW}SET DOMAIN WILDCARD$NC"
+echo -e " ${BICyan}[${BIWhite}28${BICyan}]${RED} •${NC} ${YELLOW}BUAT TEST KALO PINGIN TAMBAH FITUR$NC"
+echo -e " ${BICyan}[${BIWhite} X${BICyan}] TYPE X FOR EXIT ${BICyan}${BIYellow}${BICyan}${NC}"  
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m${NC}"
 
 echo -e "${BICyan}┌──────────────────────────────────────────────────┐${NC}"
-echo -e "${BICyan}│ ${BOLD}${BLUE}Client    = $Name                           ${NC}"
-echo -e "${BICyan}│ ${BOLD}${BLUE}Expired   = $Exp                            ${NC}"
-echo -e "${BICyan}│ ${BOLD}${BLUE}Developer = KANGHORY TUNNELING                   ${NC}"
-echo -e "${BICyan}│ ${BOLD}${RED}Version   = SUPER LTS                       ${NC}"
+echo -e "${BICyan}│ ${BOLD}${BLUE}Client    = $Name${NC}"
+echo -e "${BICyan}│ ${BOLD}${BLUE}Expired   = $Exp${NC}"
+echo -e "${BICyan}│${BOLD}${BLUE}Developer = KANGHORY TUNNELING${NC}"
+echo -e "${BICyan}│${BOLD}${RED}Version   = SUPER LTS${NC}"
 echo -e "${BICyan}└──────────────────────────────────────────────────┘${NC}"
 
 echo
@@ -230,19 +260,17 @@ case $opt in
 15) clear ; cek-trafik ;;
 16) clear ; cek-speed ;;
 17) clear ; cek-bandwidth ;;
-#18) clear ; cek-ram ;;
 18) clear ; limit-speed ;;
 19) clear ; wbm ;;
 20) clear ; cat /root/log-install.txt ;;
 21) clear ; clearlog ;;
-#99) clear ; update ;;
 22) clear ; fix ;;
 23) clear ; menu_pw_host ;;
 24) clear ; update-script ;;
 25) clear ; menu_bot_tele ;;
 26) clear ; instal-webserver ;;
 27) clear ; menu-wildcard ;;
-28) clear ; menu-test ;;    # <-- Memanggil menu hub khusus testing
+28) clear ; menu-test ;;
 
 0) clear ; menu ;;
 x) exit ;;
